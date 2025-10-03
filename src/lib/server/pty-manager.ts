@@ -14,6 +14,7 @@ export class PtyManager {
 	private sessions = new Map<string, TerminalSession>();
 	private claudePath: string | null = null;
 	private sessionManager: SessionManager;
+	private mergingSessions = new Set<string>(); // Track sessions being merged
 
 	constructor(sessionManager: SessionManager) {
 		this.sessionManager = sessionManager;
@@ -61,7 +62,16 @@ export class PtyManager {
 				this.sessions.delete(sessionId);
 				onExit(sessionId);
 				// Clean up worktree after process has fully exited
-				this.sessionManager.destroySession(sessionId);
+				// Skip cleanup if this session is being merged (merge will handle cleanup)
+				if (!this.mergingSessions.has(sessionId)) {
+					try {
+						this.sessionManager.destroySession(sessionId);
+					} catch (error) {
+						console.error(`Failed to cleanup session ${sessionId} on exit:`, error);
+					}
+				} else {
+					this.mergingSessions.delete(sessionId);
+				}
 			}
 		};
 
@@ -90,13 +100,18 @@ export class PtyManager {
 		}
 	}
 
-	destroy(sessionId: string): void {
+	destroy(sessionId: string, skipWorktreeCleanup: boolean = false): void {
 		const session = this.sessions.get(sessionId);
 		if (session) {
+			// If skipWorktreeCleanup is true, mark this session as being merged
+			// The onExit handler will skip cleanup for merging sessions
+			if (skipWorktreeCleanup) {
+				this.mergingSessions.add(sessionId);
+			}
 			session.ptyProcess.kill();
 			this.sessions.delete(sessionId);
 		}
-		// Worktree cleanup happens in onExit handler after process fully exits
+		// Worktree cleanup happens in onExit handler after process fully exits (unless skipped)
 	}
 
 	destroyAll(): void {

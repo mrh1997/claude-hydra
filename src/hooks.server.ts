@@ -97,12 +97,23 @@ function initWebSocketServer() {
 						// Accept sessionId from message payload or use connection's sessionId
 						const mergeSessionId = data.sessionId || sessionId;
 						if (mergeSessionId) {
-							const result = sessionManager.merge(mergeSessionId, data.commitMessage);
-							ws.send(JSON.stringify({ type: 'mergeResult', result }));
-							if (result.success && mergeSessionId === sessionId) {
-								// Clear sessionId only if we're merging this connection's session
-								sessionId = null;
-							}
+							// First, kill the PTY process to release file handles
+							// Skip worktree cleanup since merge will handle it
+							ptyManager.destroy(mergeSessionId, true);
+
+							// Wait a bit for process to fully exit and file handles to be released
+							setTimeout(() => {
+								const result = sessionManager.merge(mergeSessionId, data.commitMessage);
+
+								// If merge failed, we need to cleanup the merging flag
+								// (though the session is already destroyed, so this is just cleanup)
+
+								ws.send(JSON.stringify({ type: 'mergeResult', result }));
+								if (result.success && mergeSessionId === sessionId) {
+									// Clear sessionId only if we're merging this connection's session
+									sessionId = null;
+								}
+							}, 500);
 						}
 						break;
 

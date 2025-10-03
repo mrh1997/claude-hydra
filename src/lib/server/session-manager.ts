@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -97,6 +97,7 @@ export class SessionManager {
 	/**
 	 * Destroys a session and cleans up its worktree and branch.
 	 * @param sessionId - Session identifier to destroy
+	 * @throws Error if worktree cleanup fails
 	 */
 	destroySession(sessionId: string): void {
 		const session = this.sessions.get(sessionId);
@@ -105,14 +106,67 @@ export class SessionManager {
 			return;
 		}
 
-		try {
-			// Remove worktree
-			execSync(`git worktree remove "${session.worktreePath}" --force`, {
-				cwd: this.repoRoot,
-				stdio: 'pipe'
-			});
+		let worktreeRemoved = false;
 
-			// Delete branch
+		// Step 1: Try git worktree remove --force with retries
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				execSync(`git worktree remove "${session.worktreePath}" --force`, {
+					cwd: this.repoRoot,
+					stdio: 'pipe'
+				});
+				worktreeRemoved = true;
+				console.log(`Removed worktree using git: ${session.worktreePath}`);
+				break;
+			} catch (error) {
+				if (attempt < 2) {
+					console.warn(`git worktree remove attempt ${attempt + 1} failed, retrying...`);
+					// Wait a bit for file handles to be released
+					execSync('timeout /t 1 /nobreak > nul 2>&1 || sleep 1', { stdio: 'ignore' });
+				} else {
+					console.warn(`git worktree remove failed after 3 attempts, attempting manual deletion: ${error}`);
+				}
+			}
+		}
+
+		// Step 2: If git removal failed, try manual deletion with retries
+		if (!worktreeRemoved && existsSync(session.worktreePath)) {
+			for (let attempt = 0; attempt < 3; attempt++) {
+				try {
+					rmSync(session.worktreePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+					console.log(`Manually deleted worktree directory: ${session.worktreePath}`);
+
+					// Step 3: Prune worktree records after manual deletion
+					try {
+						execSync('git worktree prune', {
+							cwd: this.repoRoot,
+							stdio: 'pipe'
+						});
+						console.log('Pruned worktree records');
+						worktreeRemoved = true;
+						break;
+					} catch (pruneError) {
+						console.error(`git worktree prune failed: ${pruneError}`);
+					}
+				} catch (deleteError) {
+					if (attempt < 2) {
+						console.warn(`Manual deletion attempt ${attempt + 1} failed, retrying...`);
+						// Wait for file handles to be released
+						execSync('timeout /t 1 /nobreak > nul 2>&1 || sleep 1', { stdio: 'ignore' });
+					} else {
+						console.error(`Manual deletion failed after 3 attempts: ${deleteError}`);
+					}
+				}
+			}
+		}
+
+		// If worktree cleanup failed, throw error (don't delete branch)
+		if (!worktreeRemoved) {
+			throw new Error(`Failed to remove worktree at ${session.worktreePath}. Please close any programs accessing this directory and try again.`);
+		}
+
+		// Only delete branch if worktree was successfully removed
+		try {
 			execSync(`git branch -D "${session.branchName}"`, {
 				cwd: this.repoRoot,
 				stdio: 'pipe'
@@ -121,7 +175,8 @@ export class SessionManager {
 			this.sessions.delete(sessionId);
 			console.log(`Destroyed session ${sessionId}: branch=${session.branchName}`);
 		} catch (error) {
-			console.error(`Error cleaning up session ${sessionId}:`, error);
+			console.error(`Error deleting branch ${session.branchName}:`, error);
+			throw new Error(`Worktree removed but failed to delete branch ${session.branchName}`);
 		}
 	}
 
@@ -292,7 +347,13 @@ export class SessionManager {
 			console.log(`Fast-forwarded ${this.baseBranch} to ${session.branchName}`);
 
 			// Clean up the session (worktree and branch)
-			this.destroySession(sessionId);
+			try {
+				this.destroySession(sessionId);
+			} catch (cleanupError: any) {
+				const errorMessage = cleanupError.message || String(cleanupError);
+				console.error(`Cleanup failed for session ${sessionId}:`, errorMessage);
+				return { success: false, error: errorMessage };
+			}
 
 			return { success: true };
 		} catch (error: any) {
