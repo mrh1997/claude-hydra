@@ -60,6 +60,8 @@ export class PtyManager {
 			onExit: () => {
 				this.sessions.delete(sessionId);
 				onExit(sessionId);
+				// Clean up worktree after process has fully exited
+				this.sessionManager.destroySession(sessionId);
 			}
 		};
 
@@ -94,8 +96,7 @@ export class PtyManager {
 			session.ptyProcess.kill();
 			this.sessions.delete(sessionId);
 		}
-		// Clean up git worktree and branch
-		this.sessionManager.destroySession(sessionId);
+		// Worktree cleanup happens in onExit handler after process fully exits
 	}
 
 	destroyAll(): void {
