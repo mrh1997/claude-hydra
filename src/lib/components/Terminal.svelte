@@ -4,6 +4,7 @@
 
 	export let terminalId: string;
 	export let active: boolean = false;
+	export let branchName: string;
 
 	let terminalElement: HTMLDivElement;
 	let terminal: any;
@@ -121,8 +122,8 @@
 
 		ws.onopen = () => {
 			console.log('WebSocket connected');
-			// Request new terminal session
-			ws.send(JSON.stringify({ type: 'create' }));
+			// Request new terminal session with branch name
+			ws.send(JSON.stringify({ type: 'create', branchName }));
 		};
 
 		ws.onmessage = (event) => {
@@ -152,6 +153,12 @@
 
 					case 'exit':
 						terminals.removeTab(terminalId);
+						break;
+
+					case 'error':
+						terminal.write(`\r\n\x1b[31mError: ${message.error}\x1b[0m\r\n`);
+						// Close the tab after showing error
+						setTimeout(() => terminals.removeTab(terminalId), 2000);
 						break;
 				}
 			} catch (error) {

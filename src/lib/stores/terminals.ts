@@ -4,20 +4,21 @@ export interface TerminalTab {
 	id: string;
 	sessionId: string | null;
 	title: string;
+	branchName: string;
 	active: boolean;
 }
 
 function createTerminalsStore() {
-	const { subscribe, set, update } = writable<TerminalTab[]>([]);
+	const { subscribe, set, update} = writable<TerminalTab[]>([]);
 
 	return {
 		subscribe,
-		addTab: (id: string, title: string = 'Terminal') => {
+		addTab: (id: string, branchName: string) => {
 			update(tabs => {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
 				// Add new tab
-				return [...tabs, { id, sessionId: null, title, active: true }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true }];
 			});
 		},
 		removeTab: (id: string) => {

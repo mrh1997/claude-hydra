@@ -1,44 +1,25 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import Terminal from '$lib/components/Terminal.svelte';
 	import TerminalTabs from '$lib/components/TerminalTabs.svelte';
 	import { terminals } from '$lib/stores/terminals';
-	import { v4 as uuidv4 } from 'uuid';
 
-	let terminalIds: string[] = [];
+	let terminalData: Map<string, string> = new Map();
 
-	onMount(() => {
-		// Create initial terminal
-		createInitialTerminal();
-	});
-
-	function createInitialTerminal() {
-		const id = uuidv4();
-		terminals.addTab(id, 'Terminal 1');
-		terminalIds = [id];
+	function handleNewTab(id: string, branchName: string) {
+		terminalData = new Map(terminalData).set(id, branchName);
 	}
 
-	function handleNewTab(id: string) {
-		terminalIds = [...terminalIds, id];
-	}
+	$: activeTerminal = $terminals.find(t => t.active);
+	$: activeBranchName = activeTerminal ? (terminalData.get(activeTerminal.id) || activeTerminal.branchName) : null;
+	$: pageTitle = activeBranchName ? `${activeBranchName} - Claude Hydra` : 'Claude Hydra';
 
-	// Update terminal IDs when tabs change
-	$: {
-		// Remove terminal IDs that no longer exist in the store
-		const existingIds = $terminals.map(t => t.id);
-		terminalIds = terminalIds.filter(id => existingIds.includes(id));
-	}
 </script>
 
 <svelte:head>
-	<title>Claude Hydra</title>
+	<title>{pageTitle}</title>
 </svelte:head>
 
 <div class="app">
-	<div class="header">
-		<h1>Claude Hydra</h1>
-	</div>
-
 	<TerminalTabs onNewTab={handleNewTab} />
 
 	<div class="terminal-area">
@@ -47,11 +28,9 @@
 				Click '+' to create a new Terminal tab
 			</div>
 		{:else}
-			{#each terminalIds as terminalId (terminalId)}
-				{@const tab = $terminals.find(t => t.id === terminalId)}
-				{#if tab}
-					<Terminal {terminalId} active={tab.active} />
-				{/if}
+			{#each $terminals as tab (tab.id)}
+				{@const branchName = terminalData.get(tab.id) || tab.branchName}
+				<Terminal terminalId={tab.id} active={tab.active} {branchName} />
 			{/each}
 		{/if}
 	</div>
@@ -65,19 +44,6 @@
 		width: 100vw;
 		overflow: hidden;
 		background-color: #1e1e1e;
-	}
-
-	.header {
-		background-color: #2d2d2d;
-		padding: 8px 16px;
-		border-bottom: 1px solid #1e1e1e;
-	}
-
-	.header h1 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 600;
-		color: #cccccc;
 	}
 
 	.terminal-area {

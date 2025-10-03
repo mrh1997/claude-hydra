@@ -1,24 +1,228 @@
 <script lang="ts">
 	import { terminals } from '$lib/stores/terminals';
 	import { v4 as uuidv4 } from 'uuid';
+	import BranchNameDialog from './BranchNameDialog.svelte';
+	import CloseTabDialog from './CloseTabDialog.svelte';
+	import CommitMessageDialog from './CommitMessageDialog.svelte';
 
-	export let onNewTab: (id: string) => void = () => {};
+	export let onNewTab: (id: string, branchName: string) => void = () => {};
 
-	function createNewTab() {
-		const id = uuidv4();
-		terminals.addTab(id, 'Terminal');
-		onNewTab(id);
+	let showBranchDialog = false;
+	let showCloseDialog = false;
+	let showCommitDialog = false;
+	let dialogError = '';
+	let closeError = '';
+	let pendingCloseTabId: string | null = null;
+	let hasUncommittedChanges = false;
+	let hasUnmergedCommits = false;
+
+	function handleNewTabClick() {
+		showBranchDialog = true;
+		dialogError = '';
 	}
 
-	function closeTab(id: string, event: MouseEvent) {
+	function handleDialogSubmit(event: CustomEvent<string>) {
+		const branchName = event.detail;
+		const id = uuidv4();
+		terminals.addTab(id, branchName);
+		onNewTab(id, branchName);
+		showBranchDialog = false;
+		dialogError = '';
+	}
+
+	function handleDialogCancel() {
+		showBranchDialog = false;
+		dialogError = '';
+	}
+
+	async function closeTab(id: string, event: MouseEvent) {
 		event.stopPropagation();
-		terminals.removeTab(id);
+		closeError = '';
+
+		const tab = $terminals.find(t => t.id === id);
+		if (!tab || !tab.sessionId) {
+			// No session ID yet, just close
+			terminals.removeTab(id);
+			return;
+		}
+
+		pendingCloseTabId = id;
+
+		// Check git status before closing
+		const status = await getGitStatus(tab.sessionId);
+		if (!status) {
+			// Error getting status, just close
+			terminals.removeTab(id);
+			pendingCloseTabId = null;
+			return;
+		}
+
+		hasUncommittedChanges = status.hasUncommittedChanges;
+		hasUnmergedCommits = status.hasUnmergedCommits;
+
+		// If no changes or commits, just close
+		if (!hasUncommittedChanges && !hasUnmergedCommits) {
+			terminals.removeTab(id);
+			pendingCloseTabId = null;
+			return;
+		}
+
+		// Show dialog to ask user what to do
+		showCloseDialog = true;
+	}
+
+	async function getGitStatus(sessionId: string): Promise<{ hasUncommittedChanges: boolean; hasUnmergedCommits: boolean } | null> {
+		return new Promise((resolve) => {
+			const ws = new WebSocket('ws://localhost:3001');
+			let timeoutId: number;
+
+			ws.onopen = () => {
+				// Send sessionId in message to check existing session
+				ws.send(JSON.stringify({ type: 'getGitStatus', sessionId }));
+				timeoutId = window.setTimeout(() => {
+					ws.close();
+					resolve(null);
+				}, 5000);
+			};
+
+			ws.onmessage = (event) => {
+				const message = JSON.parse(event.data);
+				if (message.type === 'gitStatus') {
+					clearTimeout(timeoutId);
+					ws.close();
+					resolve(message.status);
+				} else if (message.type === 'error') {
+					clearTimeout(timeoutId);
+					ws.close();
+					resolve(null);
+				}
+			};
+
+			ws.onerror = () => {
+				clearTimeout(timeoutId);
+				resolve(null);
+			};
+		});
+	}
+
+	async function performMerge(sessionId: string, commitMessage?: string): Promise<{ success: boolean; error?: string }> {
+		return new Promise((resolve) => {
+			const ws = new WebSocket('ws://localhost:3001');
+			let timeoutId: number;
+
+			ws.onopen = () => {
+				ws.send(JSON.stringify({ type: 'merge', sessionId, commitMessage }));
+				timeoutId = window.setTimeout(() => {
+					ws.close();
+					resolve({ success: false, error: 'Timeout' });
+				}, 10000);
+			};
+
+			ws.onmessage = (event) => {
+				const message = JSON.parse(event.data);
+				if (message.type === 'mergeResult') {
+					clearTimeout(timeoutId);
+					ws.close();
+					resolve(message.result);
+				}
+			};
+
+			ws.onerror = () => {
+				clearTimeout(timeoutId);
+				resolve({ success: false, error: 'Connection error' });
+			};
+		});
+	}
+
+	function handleCloseDialogCancel() {
+		showCloseDialog = false;
+		pendingCloseTabId = null;
+	}
+
+	function handleCloseDialogCommitAndMerge() {
+		showCloseDialog = false;
+		showCommitDialog = true;
+	}
+
+	async function handleCloseDialogMerge() {
+		showCloseDialog = false;
+
+		if (!pendingCloseTabId) return;
+
+		const tab = $terminals.find(t => t.id === pendingCloseTabId);
+		if (!tab || !tab.sessionId) return;
+
+		const result = await performMerge(tab.sessionId);
+		if (result.success) {
+			terminals.removeTab(pendingCloseTabId);
+			pendingCloseTabId = null;
+		} else {
+			closeError = result.error || 'Merge failed. Please resolve before closing tab';
+			setTimeout(() => closeError = '', 5000);
+			pendingCloseTabId = null;
+		}
+	}
+
+	function handleCloseDialogDiscard() {
+		showCloseDialog = false;
+		if (pendingCloseTabId) {
+			terminals.removeTab(pendingCloseTabId);
+			pendingCloseTabId = null;
+		}
+	}
+
+	async function handleCommitDialogSubmit(event: CustomEvent<string>) {
+		const commitMessage = event.detail;
+		showCommitDialog = false;
+
+		if (!pendingCloseTabId) return;
+
+		const tab = $terminals.find(t => t.id === pendingCloseTabId);
+		if (!tab || !tab.sessionId) return;
+
+		const result = await performMerge(tab.sessionId, commitMessage);
+		if (result.success) {
+			terminals.removeTab(pendingCloseTabId);
+			pendingCloseTabId = null;
+		} else {
+			closeError = result.error || 'Merge failed. Please resolve before closing tab';
+			setTimeout(() => closeError = '', 5000);
+			pendingCloseTabId = null;
+		}
+	}
+
+	function handleCommitDialogCancel() {
+		showCommitDialog = false;
+		pendingCloseTabId = null;
 	}
 
 	function selectTab(id: string) {
 		terminals.setActiveTab(id);
 	}
 </script>
+
+<BranchNameDialog
+	bind:show={showBranchDialog}
+	bind:errorMessage={dialogError}
+	on:submit={handleDialogSubmit}
+	on:cancel={handleDialogCancel}
+/>
+
+<CloseTabDialog
+	bind:show={showCloseDialog}
+	bind:hasUncommittedChanges
+	bind:hasUnmergedCommits
+	on:commitAndMerge={handleCloseDialogCommitAndMerge}
+	on:merge={handleCloseDialogMerge}
+	on:discard={handleCloseDialogDiscard}
+	on:cancel={handleCloseDialogCancel}
+/>
+
+<CommitMessageDialog
+	bind:show={showCommitDialog}
+	on:submit={handleCommitDialogSubmit}
+	on:cancel={handleCommitDialogCancel}
+/>
 
 <div class="tabs-container">
 	<div class="tabs">
@@ -41,10 +245,13 @@
 				</button>
 			</div>
 		{/each}
-		<button class="new-tab-btn" on:click={createNewTab} aria-label="New terminal">
+		<button class="new-tab-btn" on:click={handleNewTabClick} aria-label="New terminal">
 			+
 		</button>
 	</div>
+	{#if closeError}
+		<div class="error-banner">{closeError}</div>
+	{/if}
 </div>
 
 <style>
@@ -131,5 +338,18 @@
 
 	.new-tab-btn:hover {
 		background-color: #2d2d2d;
+	}
+
+	.error-banner {
+		position: absolute;
+		top: 40px;
+		left: 0;
+		right: 0;
+		background-color: #5a1d1d;
+		border-bottom: 1px solid #be1100;
+		color: #f48771;
+		padding: 8px 16px;
+		font-size: 13px;
+		z-index: 999;
 	}
 </style>

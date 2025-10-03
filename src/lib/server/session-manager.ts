@@ -1,23 +1,21 @@
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync } from 'fs';
-import { homedir } from 'os';
+import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 /**
  * SessionManager manages isolated Claude Code sessions using git worktrees.
  *
  * Each terminal tab gets its own:
- * - Git branch (named <parent-branch>-task<N>)
- * - Git worktree (in ~/.claude-hydra/task<N>)
+ * - Git branch (named by the user)
+ * - Git worktree (in <repo>/.claude-hydra/<branch-name>)
  * - Isolated working directory for Claude to operate in
  *
  * This ensures multiple Claude sessions can work independently without conflicts.
  */
 export class SessionManager {
 	private baseDir: string;
-	private currentBranch: string;
 	private repoRoot: string;
-	private nextTaskNumber: number = 1;
+	private baseBranch: string;
 	private sessions = new Map<string, SessionInfo>();
 
 	constructor() {
@@ -26,47 +24,54 @@ export class SessionManager {
 			throw new Error('Not a git repository. Server must be started from within a git repository.');
 		}
 
-		// Get repository root and current branch
+		// Get repository root
 		this.repoRoot = this.getRepoRoot();
-		this.currentBranch = this.getCurrentBranch();
 
-		// Set up base directory for worktrees
-		this.baseDir = join(homedir(), '.claude-hydra');
+		// Get base branch (the branch we started from)
+		this.baseBranch = this.getBaseBranch();
+
+		// Set up base directory for worktrees (project-local)
+		this.baseDir = join(this.repoRoot, '.claude-hydra');
 		if (!existsSync(this.baseDir)) {
 			mkdirSync(this.baseDir, { recursive: true });
 		}
 
-		// Find next available task number
-		this.nextTaskNumber = this.findNextTaskNumber();
-
 		console.log(`SessionManager initialized:`);
 		console.log(`  Repository: ${this.repoRoot}`);
-		console.log(`  Current branch: ${this.currentBranch}`);
+		console.log(`  Base branch: ${this.baseBranch}`);
 		console.log(`  Base directory: ${this.baseDir}`);
-		console.log(`  Next task number: ${this.nextTaskNumber}`);
 	}
 
 	/**
 	 * Creates a new isolated session with its own git worktree and branch.
 	 * @param sessionId - Unique identifier for this session
+	 * @param branchName - User-provided branch name
 	 * @returns Session information including the worktree path to use as cwd
 	 */
-	createSession(sessionId: string): SessionInfo {
-		const taskNumber = this.nextTaskNumber++;
-		const branchName = `${this.currentBranch}-task${taskNumber}`;
-		const worktreePath = join(this.baseDir, `task${taskNumber}`);
+	createSession(sessionId: string, branchName: string): SessionInfo {
+		const worktreePath = join(this.baseDir, branchName);
+
+		// Check if branch already exists
+		if (this.branchExists(branchName)) {
+			throw new Error(`Branch '${branchName}' already exists`);
+		}
+
+		// Check if worktree path already exists
+		if (existsSync(worktreePath)) {
+			throw new Error(`Worktree directory '${branchName}' already exists`);
+		}
 
 		try {
 			// Create branch and worktree
+			// Note: git worktree outputs to stderr even on success, so we ignore stderr
 			const result = execSync(`git worktree add "${worktreePath}" -b "${branchName}"`, {
 				cwd: this.repoRoot,
 				encoding: 'utf8',
-				stdio: 'pipe'
+				stdio: ['pipe', 'pipe', 'ignore']
 			});
 
 			const sessionInfo: SessionInfo = {
 				sessionId,
-				taskNumber,
 				branchName,
 				worktreePath
 			};
@@ -76,16 +81,16 @@ export class SessionManager {
 
 			return sessionInfo;
 		} catch (error: any) {
-			// If worktree creation fails, restore task number and throw
-			this.nextTaskNumber--;
-			const stderr = error.stderr || error.message || String(error);
+			const errorMessage = error.message || String(error);
 			const stdout = error.stdout || '';
 			console.error(`Git worktree command failed:`);
 			console.error(`  Command: git worktree add "${worktreePath}" -b "${branchName}"`);
 			console.error(`  CWD: ${this.repoRoot}`);
-			console.error(`  Stdout: ${stdout}`);
-			console.error(`  Stderr: ${stderr}`);
-			throw new Error(`Failed to create worktree: ${stderr}`);
+			console.error(`  Error: ${errorMessage}`);
+			if (stdout) {
+				console.error(`  Stdout: ${stdout}`);
+			}
+			throw new Error(`Failed to create worktree: ${errorMessage}`);
 		}
 	}
 
@@ -149,35 +154,167 @@ export class SessionManager {
 		}
 	}
 
-	private getCurrentBranch(): string {
+	private getBaseBranch(): string {
 		try {
 			return execSync('git branch --show-current', {
+				cwd: this.repoRoot,
 				encoding: 'utf8',
 				stdio: 'pipe'
 			}).trim();
 		} catch (error) {
-			throw new Error('Failed to get current branch name');
+			throw new Error('Failed to get current branch');
 		}
 	}
 
-	private findNextTaskNumber(): number {
-		if (!existsSync(this.baseDir)) {
-			return 1;
+	private branchExists(branchName: string): boolean {
+		try {
+			execSync(`git rev-parse --verify "${branchName}"`, {
+				cwd: this.repoRoot,
+				stdio: 'pipe'
+			});
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Gets the git status for a session's worktree.
+	 * @param sessionId - Session identifier
+	 * @returns Status object with uncommitted changes and unmerged commits flags
+	 */
+	getGitStatus(sessionId: string): GitStatus {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new Error(`Session ${sessionId} not found`);
 		}
 
-		const entries = readdirSync(this.baseDir);
-		const taskNumbers = entries
-			.filter(name => /^task\d+$/.test(name))
-			.map(name => parseInt(name.replace('task', ''), 10))
-			.filter(n => !isNaN(n));
+		try {
+			// Check for uncommitted changes (working tree + staged)
+			const statusOutput = execSync('git status --porcelain', {
+				cwd: session.worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+			const hasUncommittedChanges = statusOutput.length > 0;
 
-		return taskNumbers.length > 0 ? Math.max(...taskNumbers) + 1 : 1;
+			// Check for unmerged commits (commits in branch that aren't in base)
+			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --oneline`, {
+				cwd: session.worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+			const hasUnmergedCommits = logOutput.length > 0;
+
+			return {
+				hasUncommittedChanges,
+				hasUnmergedCommits
+			};
+		} catch (error: any) {
+			console.error(`Error getting git status for session ${sessionId}:`, error);
+			throw new Error(`Failed to get git status: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Rebases a session's branch onto the base branch, then fast-forwards the base branch.
+	 * @param sessionId - Session identifier
+	 * @param commitMessage - Optional commit message. If provided, uncommitted changes will be committed first.
+	 * @returns Merge result with success status and optional error message
+	 */
+	merge(sessionId: string, commitMessage?: string): MergeResult {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// If commit message provided, commit uncommitted changes first
+			if (commitMessage) {
+				try {
+					// Stage all changes
+					execSync('git add -A', {
+						cwd: session.worktreePath,
+						stdio: 'pipe'
+					});
+
+					// Commit with message
+					execSync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, {
+						cwd: session.worktreePath,
+						stdio: 'pipe'
+					});
+
+					console.log(`Committed changes in session ${sessionId}: ${commitMessage}`);
+				} catch (error: any) {
+					// If commit fails (e.g., nothing to commit), continue with rebase
+					console.log(`Commit skipped for session ${sessionId}: ${error.message}`);
+				}
+			}
+
+			// Rebase the session branch onto the base branch
+			try {
+				execSync(`git rebase "${this.baseBranch}"`, {
+					cwd: session.worktreePath,
+					encoding: 'utf8',
+					stdio: 'pipe'
+				});
+
+				console.log(`Rebased session ${sessionId} (${session.branchName}) onto ${this.baseBranch}`);
+			} catch (rebaseError: any) {
+				// Rebase failed - abort it
+				try {
+					execSync('git rebase --abort', {
+						cwd: session.worktreePath,
+						stdio: 'pipe'
+					});
+				} catch (abortError) {
+					console.error(`Failed to abort rebase for session ${sessionId}:`, abortError);
+				}
+
+				const errorMessage = rebaseError.message || String(rebaseError);
+				console.error(`Rebase failed for session ${sessionId}:`, errorMessage);
+				return { success: false, error: `Rebase failed. Please resolve before closing tab` };
+			}
+
+			// Switch to base branch in main repo
+			execSync(`git checkout "${this.baseBranch}"`, {
+				cwd: this.repoRoot,
+				stdio: 'pipe'
+			});
+
+			// Fast-forward merge the session branch into base branch
+			execSync(`git merge --ff-only "${session.branchName}"`, {
+				cwd: this.repoRoot,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			});
+
+			console.log(`Fast-forwarded ${this.baseBranch} to ${session.branchName}`);
+
+			// Clean up the session (worktree and branch)
+			this.destroySession(sessionId);
+
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Merge failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
 	}
 }
 
 export interface SessionInfo {
 	sessionId: string;
-	taskNumber: number;
 	branchName: string;
 	worktreePath: string;
+}
+
+export interface GitStatus {
+	hasUncommittedChanges: boolean;
+	hasUnmergedCommits: boolean;
+}
+
+export interface MergeResult {
+	success: boolean;
+	error?: string;
 }

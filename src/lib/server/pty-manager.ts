@@ -35,11 +35,11 @@ export class PtyManager {
 		}
 	}
 
-	createSession(onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void): string {
+	createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void): string {
 		const sessionId = uuidv4();
 
 		// Create isolated git worktree session
-		const sessionInfo = this.sessionManager.createSession(sessionId);
+		const sessionInfo = this.sessionManager.createSession(sessionId, branchName);
 
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();

@@ -33,21 +33,33 @@ function initWebSocketServer() {
 				switch (data.type) {
 					case 'create':
 						// Create a new terminal session
-						sessionId = ptyManager.createSession(
-							(sid, output) => {
-								// Send terminal output to client
-								if (ws.readyState === ws.OPEN) {
-									ws.send(JSON.stringify({ type: 'data', data: output }));
-								}
-							},
-							(sid) => {
-								// Handle terminal exit
-								if (ws.readyState === ws.OPEN) {
-									ws.send(JSON.stringify({ type: 'exit' }));
-								}
+						try {
+							if (!data.branchName) {
+								ws.send(JSON.stringify({ type: 'error', error: 'Branch name is required' }));
+								break;
 							}
-						);
-						ws.send(JSON.stringify({ type: 'created', sessionId }));
+
+							sessionId = ptyManager.createSession(
+								data.branchName,
+								(sid, output) => {
+									// Send terminal output to client
+									if (ws.readyState === ws.OPEN) {
+										ws.send(JSON.stringify({ type: 'data', data: output }));
+									}
+								},
+								(sid) => {
+									// Handle terminal exit
+									if (ws.readyState === ws.OPEN) {
+										ws.send(JSON.stringify({ type: 'exit' }));
+									}
+								}
+							);
+							ws.send(JSON.stringify({ type: 'created', sessionId }));
+						} catch (error: any) {
+							const errorMessage = error.message || String(error);
+							console.error('Failed to create session:', errorMessage);
+							ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
+						}
 						break;
 
 					case 'data':
@@ -61,6 +73,36 @@ function initWebSocketServer() {
 						// Resize terminal
 						if (sessionId) {
 							ptyManager.resize(sessionId, data.cols, data.rows);
+						}
+						break;
+
+					case 'getGitStatus':
+						// Get git status for the session
+						// Accept sessionId from message payload or use connection's sessionId
+						const statusSessionId = data.sessionId || sessionId;
+						if (statusSessionId) {
+							try {
+								const status = sessionManager.getGitStatus(statusSessionId);
+								ws.send(JSON.stringify({ type: 'gitStatus', status }));
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to get git status:', errorMessage);
+								ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
+							}
+						}
+						break;
+
+					case 'merge':
+						// Merge session branch to base branch
+						// Accept sessionId from message payload or use connection's sessionId
+						const mergeSessionId = data.sessionId || sessionId;
+						if (mergeSessionId) {
+							const result = sessionManager.merge(mergeSessionId, data.commitMessage);
+							ws.send(JSON.stringify({ type: 'mergeResult', result }));
+							if (result.success && mergeSessionId === sessionId) {
+								// Clear sessionId only if we're merging this connection's session
+								sessionId = null;
+							}
 						}
 						break;
 
