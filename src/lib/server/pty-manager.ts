@@ -1,6 +1,7 @@
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
+import type { SessionManager } from '$lib/server/session-manager';
 
 export interface TerminalSession {
 	id: string;
@@ -12,6 +13,11 @@ export interface TerminalSession {
 export class PtyManager {
 	private sessions = new Map<string, TerminalSession>();
 	private claudePath: string | null = null;
+	private sessionManager: SessionManager;
+
+	constructor(sessionManager: SessionManager) {
+		this.sessionManager = sessionManager;
+	}
 
 	private getClaudePath(): string {
 		if (this.claudePath) {
@@ -32,15 +38,18 @@ export class PtyManager {
 	createSession(onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void): string {
 		const sessionId = uuidv4();
 
+		// Create isolated git worktree session
+		const sessionInfo = this.sessionManager.createSession(sessionId);
+
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();
 
-		// Spawn claude directly with full path
+		// Spawn claude directly with full path, using worktree as cwd
 		const ptyProcess = pty.spawn(claudePath, [], {
 			name: 'xterm-256color',
 			cols: 80,
 			rows: 30,
-			cwd: process.env.HOME || process.env.USERPROFILE || process.cwd(),
+			cwd: sessionInfo.worktreePath,
 			env: process.env as { [key: string]: string }
 		});
 
@@ -85,11 +94,15 @@ export class PtyManager {
 			session.ptyProcess.kill();
 			this.sessions.delete(sessionId);
 		}
+		// Clean up git worktree and branch
+		this.sessionManager.destroySession(sessionId);
 	}
 
 	destroyAll(): void {
 		for (const [sessionId] of this.sessions) {
 			this.destroy(sessionId);
 		}
+		// Clean up any remaining sessions
+		this.sessionManager.destroyAllSessions();
 	}
 }

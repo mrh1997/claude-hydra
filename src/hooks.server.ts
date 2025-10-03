@@ -1,9 +1,20 @@
 import type { Handle } from '@sveltejs/kit';
 import { WebSocketServer } from 'ws';
 import { PtyManager } from '$lib/server/pty-manager';
+import { SessionManager } from '$lib/server/session-manager';
 
 let wss: WebSocketServer | null = null;
-const ptyManager = new PtyManager();
+let sessionManager: SessionManager;
+let ptyManager: PtyManager;
+
+// Initialize SessionManager - will throw if not in a git repository
+try {
+	sessionManager = new SessionManager();
+	ptyManager = new PtyManager(sessionManager);
+} catch (error) {
+	console.error('Failed to initialize server:', error);
+	process.exit(1);
+}
 
 // Initialize WebSocket server
 function initWebSocketServer() {
