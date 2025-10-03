@@ -1,5 +1,6 @@
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
+import { execSync } from 'child_process';
 
 export interface TerminalSession {
 	id: string;
@@ -10,12 +11,32 @@ export interface TerminalSession {
 
 export class PtyManager {
 	private sessions = new Map<string, TerminalSession>();
+	private claudePath: string | null = null;
+
+	private getClaudePath(): string {
+		if (this.claudePath) {
+			return this.claudePath;
+		}
+
+		try {
+			// On Windows, use 'where' to find the executable
+			const command = process.platform === 'win32' ? 'where claude' : 'which claude';
+			const output = execSync(command, { encoding: 'utf8' });
+			this.claudePath = output.trim().split('\n')[0]; // Get first match
+			return this.claudePath;
+		} catch (error) {
+			throw new Error('Claude executable not found in PATH. Please ensure Claude Code is installed.');
+		}
+	}
 
 	createSession(onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void): string {
 		const sessionId = uuidv4();
 
-		// Spawn claude directly (node-pty handles .exe extension on Windows automatically)
-		const ptyProcess = pty.spawn('claude', [], {
+		// Get the full path to claude executable
+		const claudePath = this.getClaudePath();
+
+		// Spawn claude directly with full path
+		const ptyProcess = pty.spawn(claudePath, [], {
 			name: 'xterm-256color',
 			cols: 80,
 			rows: 30,
@@ -37,6 +58,9 @@ export class PtyManager {
 		ptyProcess.onExit(session.onExit);
 
 		this.sessions.set(sessionId, session);
+
+		// Send initial newline to trigger Claude to start and display welcome message
+		ptyProcess.write('\r');
 
 		return sessionId;
 	}
