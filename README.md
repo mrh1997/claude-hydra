@@ -1,4 +1,4 @@
-# Claude Code Terminal Web
+# Claude Hydra
 
 A web-based terminal interface for running Claude Code in your browser with full Windows support.
 
@@ -21,7 +21,7 @@ A web-based terminal interface for running Claude Code in your browser with full
 
 1. Navigate to the project directory:
 ```bash
-cd claude-terminal-web
+cd claude-hydra
 ```
 
 2. Dependencies are already installed. If you need to reinstall:
@@ -84,7 +84,7 @@ The terminal supports standard terminal copy/paste:
 ## File Structure
 
 ```
-claude-terminal-web/
+claude-hydra/
 ├── src/
 │   ├── lib/
 │   │   ├── components/

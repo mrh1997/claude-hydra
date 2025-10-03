@@ -31,12 +31,12 @@
 </script>
 
 <svelte:head>
-	<title>Claude Code Terminal</title>
+	<title>Claude Hydra</title>
 </svelte:head>
 
 <div class="app">
 	<div class="header">
-		<h1>Claude Code Terminal</h1>
+		<h1>Claude Hydra</h1>
 	</div>
 
 	<TerminalTabs onNewTab={handleNewTab} />
