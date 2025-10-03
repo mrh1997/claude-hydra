@@ -66,3 +66,31 @@ Server to Client:
 - xterm.js is dynamically imported in `onMount` to avoid SSR issues
 - Terminal dimensions are sent to PTY immediately after session creation to ensure proper sizing
 - To look at bugs use Playwright. Create testscript in /test/playwright but remove them again when you fixed the bug
+
+## Testing and Committing Workflow
+
+When you believe a bug fix or feature implementation is complete, automatically follow this workflow:
+
+1. **Start the development server:**
+   - Run `npm run dev` in the background
+   - Wait for server to be ready (about 3 seconds)
+   - Open browser to http://localhost:5173
+
+2. **Ask the user:** "Is everything working correctly? (yes/no)"
+
+3. **If the user responds "yes":**
+   - Stop the dev server
+   - Explicitly `git add` each source file that was created or modified during this session (track these files throughout the conversation)
+   - If any build artifacts were created, add them to .gitignore instead of committing them
+   - Create a commit with a descriptive message based on the changes made
+   - Include the standard commit footer:
+     ```
+     🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+     Co-Authored-By: Claude <noreply@anthropic.com>
+     ```
+
+4. **If the user responds "no" or provides instructions:**
+   - Stop the dev server
+   - Follow the user's instructions to fix the issues
+   - Do NOT commit anything
