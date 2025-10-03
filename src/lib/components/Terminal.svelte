@@ -133,6 +133,17 @@
 					case 'created':
 						sessionId = message.sessionId;
 						terminals.setSessionId(terminalId, sessionId);
+						// Immediately send the actual terminal size to the PTY
+						if (terminal && fitAddon) {
+							const dims = fitAddon.proposeDimensions();
+							if (dims) {
+								ws.send(JSON.stringify({
+									type: 'resize',
+									cols: dims.cols,
+									rows: dims.rows
+								}));
+							}
+						}
 						break;
 
 					case 'data':
@@ -185,6 +196,9 @@
 
 <style>
 	.terminal-container {
+		position: absolute;
+		top: 0;
+		left: 0;
 		width: 100%;
 		height: 100%;
 		display: flex;
@@ -192,7 +206,8 @@
 	}
 
 	.terminal-container.hidden {
-		display: none;
+		visibility: hidden;
+		pointer-events: none;
 	}
 
 	.terminal {
