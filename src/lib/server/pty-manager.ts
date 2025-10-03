@@ -45,7 +45,7 @@ export class PtyManager {
 		const claudePath = this.getClaudePath();
 
 		// Spawn claude directly with full path, using worktree as cwd
-		const ptyProcess = pty.spawn(claudePath, [], {
+		const ptyProcess = pty.spawn(claudePath, ['--dangerously-skip-permissions'], {
 			name: 'xterm-256color',
 			cols: 80,
 			rows: 30,
