@@ -34,17 +34,17 @@ npm run preview
 
 ### Backend (Node.js)
 - **WebSocket Server** (`src/hooks.server.ts`): Initializes on port 3001 in the SvelteKit server hook. Handles client connections and routes messages to PtyManager.
-- **PTY Manager** (`src/lib/server/pty-manager.ts`): Manages pseudo-terminal sessions using `@homebridge/node-pty-prebuilt-multiarch` for Windows ConPTY support. Auto-launches `claude` command on session creation.
+- **PTY Manager** (`src/lib/server/pty-manager.ts`): Manages pseudo-terminal sessions using `@homebridge/node-pty-prebuilt-multiarch` for Windows ConPTY support. Spawns `claude` directly as the PTY process.
 
 ### Key Flows
-1. **Session Creation**: Frontend sends `create` → Backend spawns PTY with PowerShell (Windows) or bash/shell (Unix) → Auto-runs `claude` command → Returns sessionId
+1. **Session Creation**: Frontend sends `create` → Backend spawns `claude` directly as PTY process → Returns sessionId
 2. **Data Flow**: User input → WebSocket `data` message → PTY write → PTY output → WebSocket `data` message → xterm.js display
 3. **Resize**: xterm.js resize event → WebSocket `resize` message → PTY resize
 
 ## Platform Support
 
-- **Windows**: Uses PowerShell as shell, relies on ConPTY support via node-pty-prebuilt-multiarch
-- **Unix**: Uses `$SHELL` or `/bin/bash`
+- **Cross-platform**: Spawns `claude` directly (node-pty automatically handles `.exe` extension on Windows)
+- Relies on ConPTY support (Windows) or standard PTY (Unix) via node-pty-prebuilt-multiarch
 
 ## WebSocket Message Protocol
 
@@ -61,8 +61,8 @@ Server to Client:
 
 ## Important Notes
 
-- Claude Code CLI must be in PATH for auto-launch to work
+- Claude Code CLI must be in PATH (spawned directly as `claude`)
 - WebSocket server runs on port 3001 (hardcoded in both client and server)
-- Terminal automatically launches `claude` command 500ms (Windows) or 100ms (Unix) after shell initialization
 - xterm.js is dynamically imported in `onMount` to avoid SSR issues
 - Terminal dimensions are sent to PTY immediately after session creation to ensure proper sizing
+- To look at bugs use Playwright. Create testscript in /test/playwright but remove them again when you fixed the bug
