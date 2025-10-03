@@ -58,8 +58,9 @@ export class SessionManager {
 
 		try {
 			// Create branch and worktree
-			execSync(`git worktree add "${worktreePath}" -b "${branchName}"`, {
+			const result = execSync(`git worktree add "${worktreePath}" -b "${branchName}"`, {
 				cwd: this.repoRoot,
+				encoding: 'utf8',
 				stdio: 'pipe'
 			});
 
@@ -74,10 +75,17 @@ export class SessionManager {
 			console.log(`Created session ${sessionId}: branch=${branchName}, path=${worktreePath}`);
 
 			return sessionInfo;
-		} catch (error) {
+		} catch (error: any) {
 			// If worktree creation fails, restore task number and throw
 			this.nextTaskNumber--;
-			throw new Error(`Failed to create worktree: ${error}`);
+			const stderr = error.stderr || error.message || String(error);
+			const stdout = error.stdout || '';
+			console.error(`Git worktree command failed:`);
+			console.error(`  Command: git worktree add "${worktreePath}" -b "${branchName}"`);
+			console.error(`  CWD: ${this.repoRoot}`);
+			console.error(`  Stdout: ${stdout}`);
+			console.error(`  Stderr: ${stderr}`);
+			throw new Error(`Failed to create worktree: ${stderr}`);
 		}
 	}
 

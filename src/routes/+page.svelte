@@ -42,12 +42,18 @@
 	<TerminalTabs onNewTab={handleNewTab} />
 
 	<div class="terminal-area">
-		{#each terminalIds as terminalId (terminalId)}
-			{@const tab = $terminals.find(t => t.id === terminalId)}
-			{#if tab}
-				<Terminal {terminalId} active={tab.active} />
-			{/if}
-		{/each}
+		{#if $terminals.length === 0}
+			<div class="empty-state">
+				Click '+' to create a new Terminal tab
+			</div>
+		{:else}
+			{#each terminalIds as terminalId (terminalId)}
+				{@const tab = $terminals.find(t => t.id === terminalId)}
+				{#if tab}
+					<Terminal {terminalId} active={tab.active} />
+				{/if}
+			{/each}
+		{/if}
 	</div>
 </div>
 
@@ -78,5 +84,16 @@
 		flex: 1;
 		position: relative;
 		overflow: hidden;
+	}
+
+	.empty-state {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		color: #888888;
+		font-size: 16px;
+		user-select: none;
 	}
 </style>

@@ -151,7 +151,7 @@
 						break;
 
 					case 'exit':
-						terminal.write('\r\n\r\n[Process exited]\r\n');
+						terminals.removeTab(terminalId);
 						break;
 				}
 			} catch (error) {
