@@ -145,4 +145,4 @@ npm run check:watch
 
 ## License
 
-MIT
+GPL-2.0 - See [LICENSE](LICENSE) file for details
