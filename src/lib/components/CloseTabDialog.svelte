@@ -4,6 +4,7 @@
 	export let show = false;
 	export let hasUncommittedChanges = false;
 	export let hasUnmergedCommits = false;
+	export let isExit = false;
 
 	const dispatch = createEventDispatcher();
 
@@ -20,11 +21,13 @@
 	}
 
 	function handleCancel() {
-		dispatch('cancel');
+		if (!isExit) {
+			dispatch('cancel');
+		}
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') {
+		if (event.key === 'Escape' && !isExit) {
 			handleCancel();
 		}
 	}
@@ -38,21 +41,27 @@
 			{#if hasUncommittedChanges && hasUnmergedCommits}
 				<p>This terminal has uncommitted changes and commits that haven't been merged.</p>
 				<div class="buttons">
-					<button class="cancel" on:click={handleCancel}>Cancel</button>
+					{#if !isExit}
+						<button class="cancel" on:click={handleCancel}>Cancel</button>
+					{/if}
 					<button class="warning" on:click={handleDiscard}>Discard local changes and merge</button>
 					<button class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
 				</div>
 			{:else if hasUncommittedChanges}
 				<p>This terminal has uncommitted changes.</p>
 				<div class="buttons">
-					<button class="cancel" on:click={handleCancel}>Cancel</button>
+					{#if !isExit}
+						<button class="cancel" on:click={handleCancel}>Cancel</button>
+					{/if}
 					<button class="warning" on:click={handleDiscard}>Discard everything</button>
 					<button class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
 				</div>
 			{:else if hasUnmergedCommits}
 				<p>This terminal has commits that haven't been merged.</p>
 				<div class="buttons">
-					<button class="cancel" on:click={handleCancel}>Cancel</button>
+					{#if !isExit}
+						<button class="cancel" on:click={handleCancel}>Cancel</button>
+					{/if}
 					<button class="warning" on:click={handleDiscard}>Discard commits</button>
 					<button class="primary" on:click={handleMerge}>Merge</button>
 				</div>

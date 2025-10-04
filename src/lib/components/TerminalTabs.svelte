@@ -15,6 +15,8 @@
 	let pendingCloseTabId: string | null = null;
 	let hasUncommittedChanges = false;
 	let hasUnmergedCommits = false;
+	let isExitClose = false;
+	let isRestarting = false;
 
 	function handleNewTabClick() {
 		showBranchDialog = true;
@@ -47,6 +49,7 @@
 		}
 
 		pendingCloseTabId = id;
+		isExitClose = false; // This is closing via "x" button
 
 		// Check git status before closing
 		const status = await getGitStatus(tab.sessionId);
@@ -134,18 +137,56 @@
 		});
 	}
 
+	async function performRestart(sessionId: string): Promise<{ success: boolean; error?: string }> {
+		return new Promise((resolve) => {
+			const ws = new WebSocket('ws://localhost:3001');
+			let timeoutId: number;
+
+			ws.onopen = () => {
+				ws.send(JSON.stringify({ type: 'restart', sessionId }));
+				timeoutId = window.setTimeout(() => {
+					ws.close();
+					resolve({ success: false, error: 'Timeout' });
+				}, 10000);
+			};
+
+			ws.onmessage = (event) => {
+				const message = JSON.parse(event.data);
+				if (message.type === 'restarted') {
+					clearTimeout(timeoutId);
+					ws.close();
+					resolve({ success: true });
+				} else if (message.type === 'error') {
+					clearTimeout(timeoutId);
+					ws.close();
+					resolve({ success: false, error: message.error });
+				}
+			};
+
+			ws.onerror = () => {
+				clearTimeout(timeoutId);
+				resolve({ success: false, error: 'Connection error' });
+			};
+		});
+	}
+
 	function handleCloseDialogCancel() {
 		showCloseDialog = false;
+		isExitClose = false; // Reset the flag
+
+		// Just close the dialog - the process is still running
 		pendingCloseTabId = null;
 	}
 
 	function handleCloseDialogCommitAndMerge() {
 		showCloseDialog = false;
+		isExitClose = false; // Reset the flag
 		showCommitDialog = true;
 	}
 
 	async function handleCloseDialogMerge() {
 		showCloseDialog = false;
+		isExitClose = false; // Reset the flag
 
 		if (!pendingCloseTabId) return;
 
@@ -165,6 +206,7 @@
 
 	function handleCloseDialogDiscard() {
 		showCloseDialog = false;
+		isExitClose = false; // Reset the flag
 		if (pendingCloseTabId) {
 			terminals.removeTab(pendingCloseTabId);
 			pendingCloseTabId = null;
@@ -196,6 +238,47 @@
 		pendingCloseTabId = null;
 	}
 
+	export async function handleExit(id: string) {
+		// Ignore exit events during restart
+		if (isRestarting) {
+			return;
+		}
+
+		closeError = '';
+
+		const tab = $terminals.find(t => t.id === id);
+		if (!tab || !tab.sessionId) {
+			// No session ID yet, just close
+			terminals.removeTab(id);
+			return;
+		}
+
+		pendingCloseTabId = id;
+		isExitClose = true; // This is closing via /exit command
+
+		// Check git status before closing
+		const status = await getGitStatus(tab.sessionId);
+		if (!status) {
+			// Error getting status, just close
+			terminals.removeTab(id);
+			pendingCloseTabId = null;
+			return;
+		}
+
+		hasUncommittedChanges = status.hasUncommittedChanges;
+		hasUnmergedCommits = status.hasUnmergedCommits;
+
+		// If no changes or commits, just close
+		if (!hasUncommittedChanges && !hasUnmergedCommits) {
+			terminals.removeTab(id);
+			pendingCloseTabId = null;
+			return;
+		}
+
+		// Show dialog to ask user what to do, with isExit set to true
+		showCloseDialog = true;
+	}
+
 	function selectTab(id: string) {
 		terminals.setActiveTab(id);
 	}
@@ -212,6 +295,7 @@
 	bind:show={showCloseDialog}
 	bind:hasUncommittedChanges
 	bind:hasUnmergedCommits
+	isExit={isExitClose}
 	on:commitAndMerge={handleCloseDialogCommitAndMerge}
 	on:merge={handleCloseDialogMerge}
 	on:discard={handleCloseDialogDiscard}
