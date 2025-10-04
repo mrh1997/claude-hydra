@@ -6,7 +6,14 @@
 	export let hasUnmergedCommits = false;
 	export let isExit = false;
 
+	let primaryButton: HTMLButtonElement;
+	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
+
+	// Focus primary button when dialog is shown
+	$: if (show) {
+		setTimeout(() => primaryButton?.focus(), 0);
+	}
 
 	function handleCommitAndMerge() {
 		dispatch('commitAndMerge');
@@ -29,13 +36,47 @@
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape' && !isExit) {
 			handleCancel();
+		} else if (event.key === 'Enter') {
+			if (hasUncommittedChanges) {
+				handleCommitAndMerge();
+			} else if (hasUnmergedCommits) {
+				handleMerge();
+			}
+		}
+	}
+
+	function handleDialogKeydown(event: KeyboardEvent) {
+		if (event.key === 'Tab' && dialogElement) {
+			const focusableElements = dialogElement.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), input:not([disabled])'
+			);
+			const focusableArray = Array.from(focusableElements);
+
+			if (focusableArray.length === 0) return;
+
+			const firstElement = focusableArray[0];
+			const lastElement = focusableArray[focusableArray.length - 1];
+
+			if (event.shiftKey) {
+				// Shift+Tab: If on first element, wrap to last
+				if (document.activeElement === firstElement) {
+					event.preventDefault();
+					lastElement.focus();
+				}
+			} else {
+				// Tab: If on last element, wrap to first
+				if (document.activeElement === lastElement) {
+					event.preventDefault();
+					firstElement.focus();
+				}
+			}
 		}
 	}
 </script>
 
 {#if show}
 	<div class="overlay" on:click={handleCancel} on:keydown={handleKeydown} role="presentation">
-		<div class="dialog" on:click|stopPropagation role="dialog" aria-modal="true">
+		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" aria-modal="true">
 			<h2>Close Terminal</h2>
 
 			{#if hasUncommittedChanges && hasUnmergedCommits}
@@ -45,7 +86,7 @@
 						<button class="cancel" on:click={handleCancel}>Cancel</button>
 					{/if}
 					<button class="warning" on:click={handleDiscard}>Discard local changes and merge</button>
-					<button class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
+					<button bind:this={primaryButton} class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
 				</div>
 			{:else if hasUncommittedChanges}
 				<p>This terminal has uncommitted changes.</p>
@@ -54,7 +95,7 @@
 						<button class="cancel" on:click={handleCancel}>Cancel</button>
 					{/if}
 					<button class="warning" on:click={handleDiscard}>Discard everything</button>
-					<button class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
+					<button bind:this={primaryButton} class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
 				</div>
 			{:else if hasUnmergedCommits}
 				<p>This terminal has commits that haven't been merged.</p>
@@ -63,7 +104,7 @@
 						<button class="cancel" on:click={handleCancel}>Cancel</button>
 					{/if}
 					<button class="warning" on:click={handleDiscard}>Discard commits</button>
-					<button class="primary" on:click={handleMerge}>Merge</button>
+					<button bind:this={primaryButton} class="primary" on:click={handleMerge}>Merge</button>
 				</div>
 			{/if}
 		</div>

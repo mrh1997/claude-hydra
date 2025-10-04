@@ -109,7 +109,10 @@ export class SessionManager {
 		let worktreeRemoved = false;
 
 		// Step 1: Try git worktree remove --force with retries
-		for (let attempt = 0; attempt < 3; attempt++) {
+		const maxAttempts = process.platform === 'win32' ? 5 : 3;
+		const retryDelay = process.platform === 'win32' ? 2 : 1;
+
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
 			try {
 				execSync(`git worktree remove "${session.worktreePath}" --force`, {
 					cwd: this.repoRoot,
@@ -119,21 +122,24 @@ export class SessionManager {
 				console.log(`Removed worktree using git: ${session.worktreePath}`);
 				break;
 			} catch (error) {
-				if (attempt < 2) {
+				if (attempt < maxAttempts - 1) {
 					console.warn(`git worktree remove attempt ${attempt + 1} failed, retrying...`);
-					// Wait a bit for file handles to be released
-					execSync('timeout /t 1 /nobreak > nul 2>&1 || sleep 1', { stdio: 'ignore' });
+					// Wait a bit for file handles to be released (longer on Windows)
+					execSync(`timeout /t ${retryDelay} /nobreak > nul 2>&1 || sleep ${retryDelay}`, { stdio: 'ignore' });
 				} else {
-					console.warn(`git worktree remove failed after 3 attempts, attempting manual deletion: ${error}`);
+					console.warn(`git worktree remove failed after ${maxAttempts} attempts, attempting manual deletion: ${error}`);
 				}
 			}
 		}
 
 		// Step 2: If git removal failed, try manual deletion with retries
 		if (!worktreeRemoved && existsSync(session.worktreePath)) {
-			for (let attempt = 0; attempt < 3; attempt++) {
+			const manualAttempts = process.platform === 'win32' ? 5 : 3;
+			const manualRetryDelay = process.platform === 'win32' ? 2 : 1;
+
+			for (let attempt = 0; attempt < manualAttempts; attempt++) {
 				try {
-					rmSync(session.worktreePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+					rmSync(session.worktreePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 					console.log(`Manually deleted worktree directory: ${session.worktreePath}`);
 
 					// Step 3: Prune worktree records after manual deletion
@@ -149,12 +155,12 @@ export class SessionManager {
 						console.error(`git worktree prune failed: ${pruneError}`);
 					}
 				} catch (deleteError) {
-					if (attempt < 2) {
+					if (attempt < manualAttempts - 1) {
 						console.warn(`Manual deletion attempt ${attempt + 1} failed, retrying...`);
 						// Wait for file handles to be released
-						execSync('timeout /t 1 /nobreak > nul 2>&1 || sleep 1', { stdio: 'ignore' });
+						execSync(`timeout /t ${manualRetryDelay} /nobreak > nul 2>&1 || sleep ${manualRetryDelay}`, { stdio: 'ignore' });
 					} else {
-						console.error(`Manual deletion failed after 3 attempts: ${deleteError}`);
+						console.error(`Manual deletion failed after ${manualAttempts} attempts: ${deleteError}`);
 					}
 				}
 			}

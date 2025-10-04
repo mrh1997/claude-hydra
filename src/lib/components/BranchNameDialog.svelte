@@ -6,6 +6,7 @@
 
 	let branchName = '';
 	let inputElement: HTMLInputElement;
+	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
 
 	// Clear input and focus when dialog is shown
@@ -37,11 +38,39 @@
 			handleCancel();
 		}
 	}
+
+	function handleDialogKeydown(event: KeyboardEvent) {
+		if (event.key === 'Tab' && dialogElement) {
+			const focusableElements = dialogElement.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), input:not([disabled])'
+			);
+			const focusableArray = Array.from(focusableElements);
+
+			if (focusableArray.length === 0) return;
+
+			const firstElement = focusableArray[0];
+			const lastElement = focusableArray[focusableArray.length - 1];
+
+			if (event.shiftKey) {
+				// Shift+Tab: If on first element, wrap to last
+				if (document.activeElement === firstElement) {
+					event.preventDefault();
+					lastElement.focus();
+				}
+			} else {
+				// Tab: If on last element, wrap to first
+				if (document.activeElement === lastElement) {
+					event.preventDefault();
+					firstElement.focus();
+				}
+			}
+		}
+	}
 </script>
 
 {#if show}
 	<div class="overlay" on:click={handleCancel} role="presentation">
-		<div class="dialog" on:click|stopPropagation role="dialog" aria-modal="true">
+		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" aria-modal="true">
 			<h2>Create New Terminal</h2>
 			<p>Enter a branch name for the new worktree:</p>
 

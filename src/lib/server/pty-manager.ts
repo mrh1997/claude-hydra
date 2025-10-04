@@ -64,11 +64,15 @@ export class PtyManager {
 				// Clean up worktree after process has fully exited
 				// Skip cleanup if this session is being merged (merge will handle cleanup)
 				if (!this.mergingSessions.has(sessionId)) {
-					try {
-						this.sessionManager.destroySession(sessionId);
-					} catch (error) {
-						console.error(`Failed to cleanup session ${sessionId} on exit:`, error);
-					}
+					// Add delay on Windows to ensure file handles are released
+					const cleanupDelay = process.platform === 'win32' ? 1000 : 100;
+					setTimeout(() => {
+						try {
+							this.sessionManager.destroySession(sessionId);
+						} catch (error) {
+							console.error(`Failed to cleanup session ${sessionId} on exit:`, error);
+						}
+					}, cleanupDelay);
 				} else {
 					this.mergingSessions.delete(sessionId);
 				}
