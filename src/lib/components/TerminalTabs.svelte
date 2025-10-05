@@ -319,6 +319,7 @@
 				tabindex="0"
 				on:keydown={(e) => e.key === 'Enter' && selectTab(tab.id)}
 			>
+				<span class="state-indicator" class:ready={tab.state === 'ready'} class:running={tab.state === 'running'}></span>
 				<span class="tab-title">{tab.title}</span>
 				<button
 					class="close-btn"
@@ -378,6 +379,46 @@
 	.tab.active {
 		background-color: #1e1e1e;
 		border-bottom: 2px solid #007acc;
+	}
+
+	.state-indicator {
+		width: 0.8em;
+		height: 0.8em;
+		border-radius: 50%;
+		flex-shrink: 0;
+		position: relative;
+	}
+
+	.state-indicator.ready {
+		background-color: #0dbc79;
+	}
+
+	.state-indicator.running {
+		background-color: #cd3131;
+	}
+
+	.state-indicator.running::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		background-color: #cd3131;
+		transform: translate(-50%, -50%);
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% {
+			opacity: 0.3;
+			transform: translate(-50%, -50%) scale(1);
+		}
+		50% {
+			opacity: 0.8;
+			transform: translate(-50%, -50%) scale(1.25);
+		}
 	}
 
 	.tab-title {

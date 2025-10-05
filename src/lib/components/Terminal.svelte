@@ -151,6 +151,12 @@
 						terminal.write(message.data);
 						break;
 
+					case 'state':
+						if (sessionId) {
+							terminals.updateState(sessionId, message.state);
+						}
+						break;
+
 					case 'exit':
 						terminals.removeTab(terminalId);
 						break;

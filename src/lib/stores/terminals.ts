@@ -6,6 +6,7 @@ export interface TerminalTab {
 	title: string;
 	branchName: string;
 	active: boolean;
+	state: 'ready' | 'running';
 }
 
 function createTerminalsStore() {
@@ -18,7 +19,7 @@ function createTerminalsStore() {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
 				// Add new tab
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'ready' }];
 			});
 		},
 		removeTab: (id: string) => {
@@ -53,6 +54,15 @@ function createTerminalsStore() {
 				const tab = tabs.find(tab => tab.id === id);
 				if (tab) {
 					tab.title = title;
+				}
+				return tabs;
+			});
+		},
+		updateState: (sessionId: string, state: 'ready' | 'running') => {
+			update(tabs => {
+				const tab = tabs.find(tab => tab.sessionId === sessionId);
+				if (tab) {
+					tab.state = state;
 				}
 				return tabs;
 			});

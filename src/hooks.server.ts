@@ -2,6 +2,7 @@ import type { Handle } from '@sveltejs/kit';
 import { WebSocketServer } from 'ws';
 import { PtyManager } from '$lib/server/pty-manager';
 import { SessionManager } from '$lib/server/session-manager';
+import { registerConnection, unregisterConnection } from '$lib/server/websocket-manager';
 
 let wss: WebSocketServer | null = null;
 let sessionManager: SessionManager;
@@ -25,6 +26,7 @@ function initWebSocketServer() {
 	wss.on('connection', (ws) => {
 		console.log('WebSocket client connected');
 		let sessionId: string | null = null;
+		let branchName: string | null = null;
 
 		ws.on('message', (message) => {
 			try {
@@ -39,6 +41,13 @@ function initWebSocketServer() {
 								break;
 							}
 
+							branchName = data.branchName;
+
+							// Determine base URL for hooks to call back
+							const baseUrl = process.env.NODE_ENV === 'production'
+								? 'http://localhost:4173'
+								: 'http://localhost:5173';
+
 							sessionId = ptyManager.createSession(
 								data.branchName,
 								(sid, output) => {
@@ -52,9 +61,14 @@ function initWebSocketServer() {
 									if (ws.readyState === ws.OPEN) {
 										ws.send(JSON.stringify({ type: 'exit' }));
 									}
-								}
+								},
+								baseUrl
 							);
-							ws.send(JSON.stringify({ type: 'created', sessionId }));
+
+							// Register this connection with the branch name
+							registerConnection(branchName, ws);
+
+							ws.send(JSON.stringify({ type: 'created', sessionId, branchName }));
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
 							console.error('Failed to create session:', errorMessage);
@@ -134,6 +148,9 @@ function initWebSocketServer() {
 			console.log('WebSocket client disconnected');
 			if (sessionId) {
 				ptyManager.destroy(sessionId);
+			}
+			if (branchName) {
+				unregisterConnection(branchName);
 			}
 		});
 

@@ -94,3 +94,4 @@ When you believe a bug fix or feature implementation is complete, automatically 
    - Stop the dev server
    - Follow the user's instructions to fix the issues
    - Do NOT commit anything
+- Always use bash to execute commands (not windows cmd.exe or powershell)

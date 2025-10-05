@@ -1,10 +1,13 @@
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, appendFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import type { SessionManager } from '$lib/server/session-manager';
 
 export interface TerminalSession {
 	id: string;
+	branchName: string;
 	ptyProcess: pty.IPty;
 	onData: (data: string) => void;
 	onExit: () => void;
@@ -18,6 +21,8 @@ export class PtyManager {
 
 	constructor(sessionManager: SessionManager) {
 		this.sessionManager = sessionManager;
+		// Ensure .git/info/exclude is updated at startup
+		this.updateGitExclude();
 	}
 
 	private getClaudePath(): string {
@@ -36,14 +41,127 @@ export class PtyManager {
 		}
 	}
 
-	createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void): string {
+	private setupClaudeHooks(worktreePath: string, branchName: string): void {
+		const claudeDir = join(worktreePath, '.claude');
+		const hooksDir = join(claudeDir, 'hooks');
+		const settingsPath = join(claudeDir, 'settings.local.json');
+		const hookScriptPath = join(hooksDir, 'update-state.js');
+		// Use main repo's git directory, not worktree's
+		const gitExcludePath = join(process.cwd(), '.git', 'info', 'exclude');
+
+		// Create .claude/hooks directory if it doesn't exist
+		if (!existsSync(hooksDir)) {
+			mkdirSync(hooksDir, { recursive: true });
+		}
+
+		// Copy hook script template
+		const templatePath = join(process.cwd(), 'src', 'template', 'update-state.js');
+		copyFileSync(templatePath, hookScriptPath);
+
+		// Setup settings.local.json
+		let settings: any = {};
+		if (existsSync(settingsPath)) {
+			// Read existing settings
+			const content = readFileSync(settingsPath, 'utf-8');
+			settings = JSON.parse(content);
+		}
+
+		// Ensure hooks object exists and merge in our hooks
+		if (!settings.hooks) {
+			settings.hooks = {};
+		}
+
+		// Use new hooks format with matchers
+		// UserPromptSubmit fires when user submits a prompt = Claude STARTS processing = running
+		settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit || [];
+		settings.hooks.UserPromptSubmit.push({
+			hooks: [{
+				type: 'command',
+				command: 'node .claude/hooks/update-state.js running'
+			}]
+		});
+
+		// PreToolUse fires before Claude uses a tool = running
+		settings.hooks.PreToolUse = settings.hooks.PreToolUse || [];
+		settings.hooks.PreToolUse.push({
+			hooks: [{
+				type: 'command',
+				command: 'node .claude/hooks/update-state.js running'
+			}]
+		});
+
+		// Stop fires when Claude finishes processing = ready for input
+		settings.hooks.Stop = settings.hooks.Stop || [];
+		settings.hooks.Stop.push({
+			hooks: [{
+				type: 'command',
+				command: 'node .claude/hooks/update-state.js ready'
+			}]
+		});
+
+		// Notification fires when Claude sends notifications (waiting for input, etc.) = ready
+		settings.hooks.Notification = settings.hooks.Notification || [];
+		settings.hooks.Notification.push({
+			hooks: [{
+				type: 'command',
+				command: 'node .claude/hooks/update-state.js ready'
+			}]
+		});
+
+		// Write settings back
+		writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+		// Add to .git/info/exclude
+		this.updateGitExclude();
+	}
+
+	private updateGitExclude(): void {
+		const gitExcludePath = join(process.cwd(), '.git', 'info', 'exclude');
+		const entriesToAdd = [
+			'.claude/settings.local.json',
+			'.claude/hooks/update-state.js',
+			'.claude-hydra/'
+		];
+
+		try {
+			let currentExclude = '';
+			if (existsSync(gitExcludePath)) {
+				currentExclude = readFileSync(gitExcludePath, 'utf-8');
+			}
+
+			// Check and add each entry individually if not present
+			for (const entry of entriesToAdd) {
+				if (!currentExclude.includes(entry)) {
+					appendFileSync(gitExcludePath, `\n${entry}`);
+					currentExclude += `\n${entry}`;
+				}
+			}
+		} catch (error) {
+			// Silently ignore errors
+		}
+	}
+
+	getBranchName(sessionId: string): string | undefined {
+		return this.sessions.get(sessionId)?.branchName;
+	}
+
+	createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string): string {
 		const sessionId = uuidv4();
 
 		// Create isolated git worktree session
 		const sessionInfo = this.sessionManager.createSession(sessionId, branchName);
 
+		// Setup Claude hooks
+		this.setupClaudeHooks(sessionInfo.worktreePath, branchName);
+
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();
+
+		// Prepare environment with CLAUDE_HYDRA_BASEURL
+		const env = {
+			...process.env,
+			CLAUDE_HYDRA_BASEURL: baseUrl
+		} as { [key: string]: string };
 
 		// Spawn claude directly with full path, using worktree as cwd
 		const ptyProcess = pty.spawn(claudePath, ['--dangerously-skip-permissions'], {
@@ -51,11 +169,12 @@ export class PtyManager {
 			cols: 80,
 			rows: 30,
 			cwd: sessionInfo.worktreePath,
-			env: process.env as { [key: string]: string }
+			env
 		});
 
 		const session: TerminalSession = {
 			id: sessionId,
+			branchName,
 			ptyProcess,
 			onData: (data: string) => onData(sessionId, data),
 			onExit: () => {

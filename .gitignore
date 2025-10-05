@@ -10,3 +10,4 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 nul
 .claude-hydra
+.claude/settings.local.json
