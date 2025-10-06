@@ -1,29 +1,8 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process';
-import { appendFileSync } from 'fs';
-import { join } from 'path';
 import http from 'http';
 import https from 'https';
-
-// Log stdin data to log.txt
-let stdinData = '';
-process.stdin.on('data', (chunk) => {
-  stdinData += chunk.toString();
-});
-
-process.stdin.on('end', () => {
-  if (stdinData) {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] ${stdinData}\n`;
-    const logPath = join(process.cwd(), 'log.txt');
-    try {
-      appendFileSync(logPath, logEntry);
-    } catch (error) {
-      // Ignore logging errors
-    }
-  }
-});
 
 // Get state from command line argument
 const state = process.argv[2];

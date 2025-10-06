@@ -1,13 +1,15 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
+import { homedir } from 'os';
+import { createHash } from 'crypto';
 
 /**
  * SessionManager manages isolated Claude Code sessions using git worktrees.
  *
  * Each terminal tab gets its own:
  * - Git branch (named by the user)
- * - Git worktree (in <repo>/.claude-hydra/<branch-name>)
+ * - Git worktree (in ~/.claude-hydra/<repo-name-hash>/<branch-name>)
  * - Isolated working directory for Claude to operate in
  *
  * This ensures multiple Claude sessions can work independently without conflicts.
@@ -30,8 +32,11 @@ export class SessionManager {
 		// Get base branch (the branch we started from)
 		this.baseBranch = this.getBaseBranch();
 
-		// Set up base directory for worktrees (project-local)
-		this.baseDir = join(this.repoRoot, '.claude-hydra');
+		// Set up base directory for worktrees in user home directory
+		// Format: ~/.claude-hydra/<repo-name>-<hash>
+		const repoName = basename(this.repoRoot);
+		const repoHash = createHash('md5').update(this.repoRoot).digest('hex').substring(0, 8);
+		this.baseDir = join(homedir(), '.claude-hydra', `${repoName}-${repoHash}`);
 		if (!existsSync(this.baseDir)) {
 			mkdirSync(this.baseDir, { recursive: true });
 		}
@@ -278,13 +283,13 @@ export class SessionManager {
 
 		// Normalize paths to use forward slashes for consistent comparison
 		const normalizedWorktreePath = worktree.path.replace(/\\/g, '/');
-		const claudeHydraDir = join(this.repoRoot, '.claude-hydra').replace(/\\/g, '/');
+		const normalizedBaseDir = this.baseDir.replace(/\\/g, '/');
 
-		// Check if this worktree is in .claude-hydra/ directory
-		if (!normalizedWorktreePath.startsWith(claudeHydraDir)) return;
+		// Check if this worktree is in our claude-hydra directory
+		if (!normalizedWorktreePath.startsWith(normalizedBaseDir)) return;
 
-		// Extract expected branch name from path: .claude-hydra/<branch-name>
-		const relativePath = normalizedWorktreePath.substring(claudeHydraDir.length + 1);
+		// Extract expected branch name from path: ~/.claude-hydra/<repo-name-hash>/<branch-name>
+		const relativePath = normalizedWorktreePath.substring(normalizedBaseDir.length + 1);
 		const expectedBranchName = relativePath.split('/')[0];
 
 		// Verify branch name matches
