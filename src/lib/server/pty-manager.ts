@@ -1,9 +1,10 @@
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, copyFileSync, appendFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import type { SessionManager } from '$lib/server/session-manager';
+import updateStateTemplate from '../../template/update-state.js?raw';
 
 export interface TerminalSession {
 	id: string;
@@ -54,9 +55,8 @@ export class PtyManager {
 			mkdirSync(hooksDir, { recursive: true });
 		}
 
-		// Copy hook script template
-		const templatePath = join(process.cwd(), 'src', 'template', 'update-state.js');
-		copyFileSync(templatePath, hookScriptPath);
+		// Write hook script from bundled template
+		writeFileSync(hookScriptPath, updateStateTemplate);
 
 		// Setup settings.local.json
 		let settings: any = {};
