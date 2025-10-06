@@ -120,7 +120,8 @@ export class PtyManager {
 		const entriesToAdd = [
 			'.claude/settings.local.json',
 			'.claude/hooks/update-state.js',
-			'.claude-hydra/'
+			'.claude-hydra/',
+			'CLAUDE-HYDRA-PORT'
 		];
 
 		try {

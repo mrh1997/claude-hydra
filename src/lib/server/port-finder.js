@@ -1,9 +1,11 @@
 import { createServer } from 'net';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 /**
  * Tries to bind to a port and returns whether it's available
  */
-async function isPortAvailable(port) {
+export async function isPortAvailable(port) {
 	return new Promise((resolve) => {
 		const server = createServer();
 
@@ -19,6 +21,33 @@ async function isPortAvailable(port) {
 
 		server.listen(port);
 	});
+}
+
+/**
+ * Reads the CLAUDE-HYDRA-PORT file from the repository root if it exists
+ * @param repoRoot - The git repository root directory
+ * @returns The port number from the file, or null if file doesn't exist or is invalid
+ */
+export function readPortFromFile(repoRoot) {
+	try {
+		const portFilePath = join(repoRoot, 'CLAUDE-HYDRA-PORT');
+		if (!existsSync(portFilePath)) {
+			return null;
+		}
+
+		const content = readFileSync(portFilePath, 'utf-8').trim();
+		const port = parseInt(content, 10);
+
+		// Validate port number (must leave room for port+1 for WebSocket)
+		if (isNaN(port) || port < 1 || port > 65534) {
+			return null;
+		}
+
+		return port;
+	} catch (error) {
+		// Silently return null on any file read errors
+		return null;
+	}
 }
 
 /**
