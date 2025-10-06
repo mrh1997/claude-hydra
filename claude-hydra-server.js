@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { spawn, execSync } from 'child_process';
-import { findAvailablePortPair, readPortFromFile, isPortAvailable } from './src/lib/server/port-finder.js';
+import { findAvailablePortTriple, readPortFromFile, isPortAvailable } from './src/lib/server/port-finder.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,7 +20,7 @@ async function openBrowser(url) {
 }
 
 async function startServer() {
-	let httpPort, wsPort;
+	let httpPort, wsPort, mgmtPort;
 	let portSource = 'auto-detected';
 
 	// Try to detect git repository root
@@ -38,6 +38,7 @@ async function startServer() {
 			// CLAUDE-HYDRA-PORT file exists - validate and use it
 			httpPort = fixedPort;
 			wsPort = fixedPort + 1;
+			mgmtPort = fixedPort + 2;
 			portSource = 'CLAUDE-HYDRA-PORT';
 
 			// Default to headless mode when using fixed port
@@ -48,13 +49,15 @@ async function startServer() {
 			console.log(`[claude-hydra] Found CLAUDE-HYDRA-PORT file, using fixed ports...`);
 
 			// Validate port availability
-			const [httpAvailable, wsAvailable] = await Promise.all([
+			const [httpAvailable, wsAvailable, mgmtAvailable] = await Promise.all([
 				isPortAvailable(httpPort),
-				isPortAvailable(wsPort)
+				isPortAvailable(wsPort),
+				isPortAvailable(mgmtPort)
 			]);
 
-			if (!httpAvailable || !wsAvailable) {
-				console.error(`Error: Port ${!httpAvailable ? httpPort : wsPort} from CLAUDE-HYDRA-PORT is already in use.`);
+			if (!httpAvailable || !wsAvailable || !mgmtAvailable) {
+				const busyPort = !httpAvailable ? httpPort : (!wsAvailable ? wsPort : mgmtPort);
+				console.error(`Error: Port ${busyPort} from CLAUDE-HYDRA-PORT is already in use.`);
 				console.error('Please free the port or update the CLAUDE-HYDRA-PORT file.');
 				process.exit(1);
 			}
@@ -63,13 +66,14 @@ async function startServer() {
 
 	// If no fixed port, auto-detect
 	if (!httpPort) {
-		console.log('Finding available port pair...');
-		const ports = await findAvailablePortPair(3000);
+		console.log('Finding available port triple...');
+		const ports = await findAvailablePortTriple(3000);
 		httpPort = ports.httpPort;
 		wsPort = ports.wsPort;
+		mgmtPort = ports.mgmtPort;
 	}
 
-	console.log(`[claude-hydra] Using HTTP port: ${httpPort}, WebSocket port: ${wsPort} (${portSource})`);
+	console.log(`[claude-hydra] Using HTTP port: ${httpPort}, WebSocket port: ${wsPort}, Management port: ${mgmtPort} (${portSource})`);
 	if (isHeadless) {
 		console.log('[claude-hydra] Running in headless mode (browser will not open automatically)');
 	}
@@ -77,6 +81,7 @@ async function startServer() {
 	// Set environment variables for the server
 	process.env.HTTP_PORT = String(httpPort);
 	process.env.WS_PORT = String(wsPort);
+	process.env.MGMT_PORT = String(mgmtPort);
 	process.env.PORT = String(httpPort); // For production build/index.js
 
 	if (isDev) {

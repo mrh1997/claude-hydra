@@ -6,11 +6,14 @@ import { registerConnection, unregisterConnection } from '$lib/server/websocket-
 
 // Read ports from environment variables set by claude-hydra-server.js
 const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
+const MGMT_PORT = parseInt(process.env.MGMT_PORT || '3002', 10);
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3000', 10);
 
 let wss: WebSocketServer | null = null;
+let mgmtWss: WebSocketServer | null = null;
 let sessionManager: SessionManager;
 let ptyManager: PtyManager;
+let hasManagementClient = false;
 
 // Initialize SessionManager - will throw if not in a git repository
 try {
@@ -171,8 +174,41 @@ function initWebSocketServer() {
 	console.log(`WebSocket server started on port ${WS_PORT}`);
 }
 
-// Start WebSocket server
+// Initialize Management WebSocket server
+function initManagementWebSocketServer() {
+	if (mgmtWss) return;
+
+	mgmtWss = new WebSocketServer({ port: MGMT_PORT });
+
+	mgmtWss.on('connection', (ws) => {
+		// Only accept first client, reject all others
+		if (hasManagementClient) {
+			console.log('Management connection rejected: port already in use');
+			ws.close(1008, 'Port already in use by Claude Hydra');
+			return;
+		}
+
+		hasManagementClient = true;
+		console.log('Management client connected');
+
+		ws.on('close', () => {
+			console.log('Management client disconnected - shutting down server');
+			hasManagementClient = false;
+			// Client closed, shut down server
+			process.exit(0);
+		});
+
+		ws.on('error', (error) => {
+			console.error('Management WebSocket error:', error);
+		});
+	});
+
+	console.log(`Management WebSocket server started on port ${MGMT_PORT}`);
+}
+
+// Start WebSocket servers
 initWebSocketServer();
+initManagementWebSocketServer();
 
 export const handle: Handle = async ({ event, resolve }) => {
 	return resolve(event);

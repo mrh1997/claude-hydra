@@ -25,11 +25,13 @@ export async function load() {
 		}
 	}
 
-	// Read WebSocket port from environment variable set by claude-hydra-server.js
+	// Read WebSocket ports from environment variables set by claude-hydra-server.js
 	const websocketPort = parseInt(process.env.WS_PORT || '3001', 10);
+	const managementPort = parseInt(process.env.MGMT_PORT || '3002', 10);
 
 	return {
 		version,
-		websocketPort
+		websocketPort,
+		managementPort
 	};
 }

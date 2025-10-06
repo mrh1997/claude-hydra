@@ -6,6 +6,7 @@
 
 	setContext('version', data.version);
 	setContext('websocketPort', data.websocketPort);
+	setContext('managementPort', data.managementPort);
 </script>
 
 <slot />

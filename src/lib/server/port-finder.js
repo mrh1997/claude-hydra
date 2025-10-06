@@ -38,8 +38,8 @@ export function readPortFromFile(repoRoot) {
 		const content = readFileSync(portFilePath, 'utf-8').trim();
 		const port = parseInt(content, 10);
 
-		// Validate port number (must leave room for port+1 for WebSocket)
-		if (isNaN(port) || port < 1 || port > 65534) {
+		// Validate port number (must leave room for port+1 for WebSocket and port+2 for Management)
+		if (isNaN(port) || port < 1 || port > 65533) {
 			return null;
 		}
 
@@ -51,30 +51,31 @@ export function readPortFromFile(repoRoot) {
 }
 
 /**
- * Finds an available port pair (even port for HTTP, next odd port for WebSocket)
- * Starts at startPort and tests pairs: (3000, 3001), (3002, 3003), (3004, 3005), etc.
+ * Finds three consecutive available ports (HTTP, WebSocket, Management)
+ * Starts at startPort and tests triples: (3000, 3001, 3002), (3003, 3004, 3005), etc.
  * Uses strictPort in Vite config to ensure the port is actually used.
  */
-export async function findAvailablePortPair(startPort = 3000) {
-	// Ensure startPort is even
-	let httpPort = startPort % 2 === 0 ? startPort : startPort + 1;
+export async function findAvailablePortTriple(startPort = 3000) {
+	let httpPort = startPort;
 
-	while (httpPort < 65535) {
+	while (httpPort < 65533) {
 		const wsPort = httpPort + 1;
+		const mgmtPort = httpPort + 2;
 
-		// Test both ports
-		const [httpAvailable, wsAvailable] = await Promise.all([
+		// Test all three ports
+		const [httpAvailable, wsAvailable, mgmtAvailable] = await Promise.all([
 			isPortAvailable(httpPort),
-			isPortAvailable(wsPort)
+			isPortAvailable(wsPort),
+			isPortAvailable(mgmtPort)
 		]);
 
-		if (httpAvailable && wsAvailable) {
-			return { httpPort, wsPort };
+		if (httpAvailable && wsAvailable && mgmtAvailable) {
+			return { httpPort, wsPort, mgmtPort };
 		}
 
-		// Try next pair (increment by 2 to get next even number)
-		httpPort += 2;
+		// Try next triple (increment by 3)
+		httpPort += 3;
 	}
 
-	throw new Error('No available port pair found');
+	throw new Error('No available port triple found');
 }
