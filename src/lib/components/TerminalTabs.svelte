@@ -17,6 +17,7 @@
 	let hasUnmergedCommits = false;
 	let isExitClose = false;
 	let isRestarting = false;
+	let mergingTabIds = new Set<string>(); // Track tabs currently being merged
 
 	function handleNewTabClick() {
 		showBranchDialog = true;
@@ -37,8 +38,7 @@
 		dialogError = '';
 	}
 
-	async function closeTab(id: string, event: MouseEvent) {
-		event.stopPropagation();
+	async function checkAndClose(id: string, isExit: boolean) {
 		closeError = '';
 
 		const tab = $terminals.find(t => t.id === id);
@@ -49,7 +49,7 @@
 		}
 
 		pendingCloseTabId = id;
-		isExitClose = false; // This is closing via "x" button
+		isExitClose = isExit;
 
 		// Check git status before closing
 		const status = await getGitStatus(tab.sessionId);
@@ -72,6 +72,11 @@
 
 		// Show dialog to ask user what to do
 		showCloseDialog = true;
+	}
+
+	async function closeTab(id: string, event: MouseEvent) {
+		event.stopPropagation();
+		await checkAndClose(id, false);
 	}
 
 	async function getGitStatus(sessionId: string): Promise<{ hasUncommittedChanges: boolean; hasUnmergedCommits: boolean } | null> {
@@ -172,28 +177,31 @@
 
 	function handleCloseDialogCancel() {
 		showCloseDialog = false;
-		isExitClose = false; // Reset the flag
-
 		// Just close the dialog - the process is still running
 		pendingCloseTabId = null;
 	}
 
 	function handleCloseDialogCommitAndMerge() {
 		showCloseDialog = false;
-		isExitClose = false; // Reset the flag
 		showCommitDialog = true;
 	}
 
 	async function handleCloseDialogMerge() {
 		showCloseDialog = false;
-		isExitClose = false; // Reset the flag
 
 		if (!pendingCloseTabId) return;
 
 		const tab = $terminals.find(t => t.id === pendingCloseTabId);
 		if (!tab || !tab.sessionId) return;
 
+		// Mark this tab as being merged to prevent exit event from re-triggering dialog
+		mergingTabIds.add(pendingCloseTabId);
+
 		const result = await performMerge(tab.sessionId);
+
+		// Remove from merging set after merge completes
+		mergingTabIds.delete(pendingCloseTabId);
+
 		if (result.success) {
 			terminals.removeTab(pendingCloseTabId);
 			pendingCloseTabId = null;
@@ -206,7 +214,6 @@
 
 	function handleCloseDialogDiscard() {
 		showCloseDialog = false;
-		isExitClose = false; // Reset the flag
 		if (pendingCloseTabId) {
 			terminals.removeTab(pendingCloseTabId);
 			pendingCloseTabId = null;
@@ -222,7 +229,14 @@
 		const tab = $terminals.find(t => t.id === pendingCloseTabId);
 		if (!tab || !tab.sessionId) return;
 
+		// Mark this tab as being merged to prevent exit event from re-triggering dialog
+		mergingTabIds.add(pendingCloseTabId);
+
 		const result = await performMerge(tab.sessionId, commitMessage);
+
+		// Remove from merging set after merge completes
+		mergingTabIds.delete(pendingCloseTabId);
+
 		if (result.success) {
 			terminals.removeTab(pendingCloseTabId);
 			pendingCloseTabId = null;
@@ -244,39 +258,15 @@
 			return;
 		}
 
-		closeError = '';
-
-		const tab = $terminals.find(t => t.id === id);
-		if (!tab || !tab.sessionId) {
-			// No session ID yet, just close
+		// If this tab is being merged, the exit event is expected (merge kills PTY)
+		// Just remove the tab and let the merge flow handle cleanup
+		if (mergingTabIds.has(id)) {
 			terminals.removeTab(id);
+			mergingTabIds.delete(id);
 			return;
 		}
 
-		pendingCloseTabId = id;
-		isExitClose = true; // This is closing via /exit command
-
-		// Check git status before closing
-		const status = await getGitStatus(tab.sessionId);
-		if (!status) {
-			// Error getting status, just close
-			terminals.removeTab(id);
-			pendingCloseTabId = null;
-			return;
-		}
-
-		hasUncommittedChanges = status.hasUncommittedChanges;
-		hasUnmergedCommits = status.hasUnmergedCommits;
-
-		// If no changes or commits, just close
-		if (!hasUncommittedChanges && !hasUnmergedCommits) {
-			terminals.removeTab(id);
-			pendingCloseTabId = null;
-			return;
-		}
-
-		// Show dialog to ask user what to do, with isExit set to true
-		showCloseDialog = true;
+		await checkAndClose(id, true);
 	}
 
 	function selectTab(id: string) {

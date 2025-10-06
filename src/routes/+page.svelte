@@ -4,9 +4,16 @@
 	import { terminals } from '$lib/stores/terminals';
 
 	let terminalData: Map<string, string> = new Map();
+	let terminalTabs: TerminalTabs;
 
 	function handleNewTab(id: string, branchName: string) {
 		terminalData = new Map(terminalData).set(id, branchName);
+	}
+
+	function handleTerminalExit(event: CustomEvent<{ terminalId: string }>) {
+		if (terminalTabs) {
+			terminalTabs.handleExit(event.detail.terminalId);
+		}
 	}
 
 	$: activeTerminal = $terminals.find(t => t.active);
@@ -20,7 +27,7 @@
 </svelte:head>
 
 <div class="app">
-	<TerminalTabs onNewTab={handleNewTab} />
+	<TerminalTabs bind:this={terminalTabs} onNewTab={handleNewTab} />
 
 	<div class="terminal-area">
 		{#if $terminals.length === 0}
@@ -30,7 +37,7 @@
 		{:else}
 			{#each $terminals as tab (tab.id)}
 				{@const branchName = terminalData.get(tab.id) || tab.branchName}
-				<Terminal terminalId={tab.id} active={tab.active} {branchName} />
+				<Terminal terminalId={tab.id} active={tab.active} {branchName} on:exit={handleTerminalExit} />
 			{/each}
 		{/if}
 	</div>

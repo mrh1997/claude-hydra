@@ -1,10 +1,12 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, createEventDispatcher } from 'svelte';
 	import { terminals } from '$lib/stores/terminals';
 
 	export let terminalId: string;
 	export let active: boolean = false;
 	export let branchName: string;
+
+	const dispatch = createEventDispatcher();
 
 	let terminalElement: HTMLDivElement;
 	let terminal: any;
@@ -158,7 +160,7 @@
 						break;
 
 					case 'exit':
-						terminals.removeTab(terminalId);
+						dispatch('exit', { terminalId });
 						break;
 
 					case 'error':

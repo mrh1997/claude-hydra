@@ -33,15 +33,32 @@
 		}
 	}
 
+	// Computed dialog configuration
+	$: dialogMessage = hasUncommittedChanges && hasUnmergedCommits
+		? "This terminal has uncommitted changes and commits that haven't been merged."
+		: hasUncommittedChanges
+		? "This terminal has uncommitted changes."
+		: "This terminal has commits that haven't been merged.";
+
+	$: warningButtonText = hasUncommittedChanges && hasUnmergedCommits
+		? "Discard local changes and merge"
+		: hasUncommittedChanges
+		? "Discard everything"
+		: "Discard commits";
+
+	$: primaryButtonText = hasUncommittedChanges
+		? "Commit and merge"
+		: "Merge";
+
+	$: primaryButtonAction = hasUncommittedChanges
+		? handleCommitAndMerge
+		: handleMerge;
+
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape' && !isExit) {
 			handleCancel();
 		} else if (event.key === 'Enter') {
-			if (hasUncommittedChanges) {
-				handleCommitAndMerge();
-			} else if (hasUnmergedCommits) {
-				handleMerge();
-			}
+			primaryButtonAction();
 		}
 	}
 
@@ -78,35 +95,14 @@
 	<div class="overlay" on:click={handleCancel} on:keydown={handleKeydown} role="presentation">
 		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" aria-modal="true">
 			<h2>Close Terminal</h2>
-
-			{#if hasUncommittedChanges && hasUnmergedCommits}
-				<p>This terminal has uncommitted changes and commits that haven't been merged.</p>
-				<div class="buttons">
-					{#if !isExit}
-						<button class="cancel" on:click={handleCancel}>Cancel</button>
-					{/if}
-					<button class="warning" on:click={handleDiscard}>Discard local changes and merge</button>
-					<button bind:this={primaryButton} class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
-				</div>
-			{:else if hasUncommittedChanges}
-				<p>This terminal has uncommitted changes.</p>
-				<div class="buttons">
-					{#if !isExit}
-						<button class="cancel" on:click={handleCancel}>Cancel</button>
-					{/if}
-					<button class="warning" on:click={handleDiscard}>Discard everything</button>
-					<button bind:this={primaryButton} class="primary" on:click={handleCommitAndMerge}>Commit and merge</button>
-				</div>
-			{:else if hasUnmergedCommits}
-				<p>This terminal has commits that haven't been merged.</p>
-				<div class="buttons">
-					{#if !isExit}
-						<button class="cancel" on:click={handleCancel}>Cancel</button>
-					{/if}
-					<button class="warning" on:click={handleDiscard}>Discard commits</button>
-					<button bind:this={primaryButton} class="primary" on:click={handleMerge}>Merge</button>
-				</div>
-			{/if}
+			<p>{dialogMessage}</p>
+			<div class="buttons">
+				{#if !isExit}
+					<button class="cancel" on:click={handleCancel}>Cancel</button>
+				{/if}
+				<button class="warning" on:click={handleDiscard}>{warningButtonText}</button>
+				<button bind:this={primaryButton} class="primary" on:click={primaryButtonAction}>{primaryButtonText}</button>
+			</div>
 		</div>
 	</div>
 {/if}

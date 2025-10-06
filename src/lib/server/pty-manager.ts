@@ -180,19 +180,13 @@ export class PtyManager {
 			onExit: () => {
 				this.sessions.delete(sessionId);
 				onExit(sessionId);
-				// Clean up worktree after process has fully exited
-				// Skip cleanup if this session is being merged (merge will handle cleanup)
-				if (!this.mergingSessions.has(sessionId)) {
-					// Add delay on Windows to ensure file handles are released
-					const cleanupDelay = process.platform === 'win32' ? 1000 : 100;
-					setTimeout(() => {
-						try {
-							this.sessionManager.destroySession(sessionId);
-						} catch (error) {
-							console.error(`Failed to cleanup session ${sessionId} on exit:`, error);
-						}
-					}, cleanupDelay);
-				} else {
+				// Don't auto-destroy session - let frontend handle cleanup
+				// Session will be destroyed via:
+				// - merge flow (merge destroys session after commit/rebase)
+				// - discard flow (tab removal sends 'destroy' message)
+				// - WebSocket close (guaranteed cleanup for crashes/disconnects)
+				// Clean up mergingSessions tracking if this was a merge operation
+				if (this.mergingSessions.has(sessionId)) {
 					this.mergingSessions.delete(sessionId);
 				}
 			}
@@ -233,8 +227,21 @@ export class PtyManager {
 			}
 			session.ptyProcess.kill();
 			this.sessions.delete(sessionId);
+
+			// When NOT in merge flow, clean up the worktree/branch
+			// This handles: WebSocket disconnect, explicit destroy message, discards
+			if (!skipWorktreeCleanup) {
+				// Add delay on Windows to ensure PTY process fully exits and file handles are released
+				const cleanupDelay = process.platform === 'win32' ? 1000 : 100;
+				setTimeout(() => {
+					try {
+						this.sessionManager.destroySession(sessionId);
+					} catch (error) {
+						console.error(`Failed to cleanup session ${sessionId}:`, error);
+					}
+				}, cleanupDelay);
+			}
 		}
-		// Worktree cleanup happens in onExit handler after process fully exits (unless skipped)
 	}
 
 	destroyAll(): void {
