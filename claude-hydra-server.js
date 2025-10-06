@@ -11,6 +11,7 @@ const __dirname = dirname(__filename);
 
 // Detect mode: --dev flag or check if build directory exists
 const isDev = process.argv.includes('--dev') || !existsSync(join(__dirname, 'build'));
+const isHeadless = process.argv.includes('--headless') || process.argv.includes('-hl');
 
 // Open browser helper
 async function openBrowser(url) {
@@ -24,6 +25,9 @@ async function startServer() {
 	const { httpPort, wsPort } = await findAvailablePortPair(3000);
 
 	console.log(`[claude-hydra] Using HTTP port: ${httpPort}, WebSocket port: ${wsPort}`);
+	if (isHeadless) {
+		console.log('[claude-hydra] Running in headless mode (browser will not open automatically)');
+	}
 
 	// Set environment variables for the server
 	process.env.HTTP_PORT = String(httpPort);
@@ -47,8 +51,10 @@ async function startServer() {
 		const url = `http://localhost:${httpPort}`;
 		console.log(`\n  ➜ Local: ${url}\n`);
 
-		// Open browser after server is ready
-		await openBrowser(url);
+		// Open browser after server is ready (unless headless)
+		if (!isHeadless) {
+			await openBrowser(url);
+		}
 
 	} else {
 		// Production mode: Run build/index.js
@@ -75,11 +81,13 @@ async function startServer() {
 			process.exit(code || 0);
 		});
 
-		// Wait a bit for server to start, then open browser
-		setTimeout(async () => {
-			const url = `http://localhost:${httpPort}`;
-			await openBrowser(url);
-		}, 2000);
+		// Wait a bit for server to start, then open browser (unless headless)
+		if (!isHeadless) {
+			setTimeout(async () => {
+				const url = `http://localhost:${httpPort}`;
+				await openBrowser(url);
+			}, 2000);
+		}
 	}
 }
 

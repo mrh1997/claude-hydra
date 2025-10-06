@@ -66,6 +66,7 @@ Server to Client:
 - xterm.js is dynamically imported in `onMount` to avoid SSR issues
 - Terminal dimensions are sent to PTY immediately after session creation to ensure proper sizing
 - To look at bugs use Playwright. Create testscript in /test/playwright but remove them again when you fixed the bug
+- Always use bash to execute commands (not windows cmd.exe or powershell)
 
 ## Testing and Committing Workflow
 
@@ -76,15 +77,11 @@ When you believe a bug fix or feature implementation is complete, automatically 
    - Otherwise, read the current value and increment by 1
    - This updates the version indicator in the UI to verify HMR is working
 
-2. **Start the development server:**
-   - Run `npm run dev` in the background
-   - Wait for server to be ready (about 3 seconds)
-   - Open browser to http://localhost:5173
+2. **Start the development Server with option "--headless" in Background if not running yet in background**
 
 3. **Ask the user:** "Is everything working correctly? (yes/no)"
 
 4. **If the user responds "yes":**
-   - Stop the dev server
    - Reset MODVERSION to "1" (overwrite the file with just "1")
    - Explicitly `git add` each source file that was created or modified during this session (track these files throughout the conversation)
    - If any build artifacts were created, add them to .gitignore instead of committing them
@@ -97,8 +94,6 @@ When you believe a bug fix or feature implementation is complete, automatically 
      ```
 
 5. **If the user responds "no" or provides instructions:**
-   - Stop the dev server
    - Follow the user's instructions to fix the issues
    - Go back to step 1 (increment MODVERSION again before testing)
    - Do NOT commit anything until the user confirms everything works
-- Always use bash to execute commands (not windows cmd.exe or powershell)

@@ -4,4 +4,3 @@
 - if restarting, search all existing directories and open all corresponding tabs
 - pasting does not work (neither ctrl-v not alt-v)
 - when creating branch ensure that neither working tree nor branch with that name exists
-- /exit does not ask if changes shall be saved
