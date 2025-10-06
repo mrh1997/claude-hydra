@@ -99,5 +99,6 @@ When you believe a bug fix or feature implementation is complete, automatically 
 5. **If the user responds "no" or provides instructions:**
    - Stop the dev server
    - Follow the user's instructions to fix the issues
-   - Do NOT commit anything
+   - Go back to step 1 (increment MODVERSION again before testing)
+   - Do NOT commit anything until the user confirms everything works
 - Always use bash to execute commands (not windows cmd.exe or powershell)
