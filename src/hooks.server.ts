@@ -4,6 +4,9 @@ import { PtyManager } from '$lib/server/pty-manager';
 import { SessionManager } from '$lib/server/session-manager';
 import { registerConnection, unregisterConnection } from '$lib/server/websocket-manager';
 
+// Read WebSocket port from environment variable set by claude-hydra-server.js
+const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
+
 let wss: WebSocketServer | null = null;
 let sessionManager: SessionManager;
 let ptyManager: PtyManager;
@@ -21,7 +24,7 @@ try {
 function initWebSocketServer() {
 	if (wss) return;
 
-	wss = new WebSocketServer({ port: 3001 });
+	wss = new WebSocketServer({ port: WS_PORT });
 
 	wss.on('connection', (ws) => {
 		console.log('WebSocket client connected');
@@ -159,7 +162,7 @@ function initWebSocketServer() {
 		});
 	});
 
-	console.log('WebSocket server started on port 3001');
+	console.log(`WebSocket server started on port ${WS_PORT}`);
 }
 
 // Start WebSocket server

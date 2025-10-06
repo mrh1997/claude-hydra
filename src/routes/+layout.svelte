@@ -5,6 +5,7 @@
 	export let data;
 
 	setContext('version', data.version);
+	setContext('websocketPort', data.websocketPort);
 </script>
 
 <slot />

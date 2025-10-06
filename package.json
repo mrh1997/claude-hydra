@@ -3,10 +3,13 @@
   "version": "0.0.1",
   "license": "GPL-2.0",
   "private": true,
+  "bin": {
+    "claude-hydra": "./claude-hydra-server.js"
+  },
   "scripts": {
-    "dev": "vite dev",
+    "dev": "node claude-hydra-server.js --dev",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "node claude-hydra-server.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
   },
@@ -28,6 +31,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
+    "open": "^10.1.0",
     "uuid": "^11.0.4",
     "ws": "^8.18.0"
   },

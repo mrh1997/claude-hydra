@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+	import { onMount, onDestroy, createEventDispatcher, getContext } from 'svelte';
 	import { terminals } from '$lib/stores/terminals';
 
 	export let terminalId: string;
@@ -7,6 +7,7 @@
 	export let branchName: string;
 
 	const dispatch = createEventDispatcher();
+	const websocketPort = getContext<number>('websocketPort');
 
 	let terminalElement: HTMLDivElement;
 	let terminal: any;
@@ -120,7 +121,7 @@
 	});
 
 	function connectWebSocket() {
-		ws = new WebSocket('ws://localhost:3001');
+		ws = new WebSocket(`ws://localhost:${websocketPort}`);
 
 		ws.onopen = () => {
 			console.log('WebSocket connected');
