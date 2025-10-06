@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { terminals } from '$lib/stores/terminals';
 	import { v4 as uuidv4 } from 'uuid';
+	import { getContext } from 'svelte';
 	import BranchNameDialog from './BranchNameDialog.svelte';
 	import CloseTabDialog from './CloseTabDialog.svelte';
 	import CommitMessageDialog from './CommitMessageDialog.svelte';
+
+	const version = getContext<string>('version');
 
 	export let onNewTab: (id: string, branchName: string) => void = () => {};
 
@@ -324,6 +327,9 @@
 			+
 		</button>
 	</div>
+	{#if version}
+		<div class="version-indicator">{version}</div>
+	{/if}
 	{#if closeError}
 		<div class="error-banner">{closeError}</div>
 	{/if}
@@ -466,5 +472,17 @@
 		padding: 8px 16px;
 		font-size: 13px;
 		z-index: 999;
+	}
+
+	.version-indicator {
+		position: absolute;
+		top: 2px;
+		right: 8px;
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.3);
+		font-family: monospace;
+		user-select: none;
+		pointer-events: none;
+		z-index: 1000;
 	}
 </style>

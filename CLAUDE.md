@@ -71,15 +71,21 @@ Server to Client:
 
 When you believe a bug fix or feature implementation is complete, automatically follow this workflow:
 
-1. **Start the development server:**
+1. **Increment MODVERSION before testing:**
+   - If MODVERSION file doesn't exist, create it with content "1"
+   - Otherwise, read the current value and increment by 1
+   - This updates the version indicator in the UI to verify HMR is working
+
+2. **Start the development server:**
    - Run `npm run dev` in the background
    - Wait for server to be ready (about 3 seconds)
    - Open browser to http://localhost:5173
 
-2. **Ask the user:** "Is everything working correctly? (yes/no)"
+3. **Ask the user:** "Is everything working correctly? (yes/no)"
 
-3. **If the user responds "yes":**
+4. **If the user responds "yes":**
    - Stop the dev server
+   - Reset MODVERSION to "1" (overwrite the file with just "1")
    - Explicitly `git add` each source file that was created or modified during this session (track these files throughout the conversation)
    - If any build artifacts were created, add them to .gitignore instead of committing them
    - Create a commit with a descriptive message based on the changes made
@@ -90,7 +96,7 @@ When you believe a bug fix or feature implementation is complete, automatically 
      Co-Authored-By: Claude <noreply@anthropic.com>
      ```
 
-4. **If the user responds "no" or provides instructions:**
+5. **If the user responds "no" or provides instructions:**
    - Stop the dev server
    - Follow the user's instructions to fix the issues
    - Do NOT commit anything
