@@ -4,8 +4,9 @@ import { PtyManager } from '$lib/server/pty-manager';
 import { SessionManager } from '$lib/server/session-manager';
 import { registerConnection, unregisterConnection } from '$lib/server/websocket-manager';
 
-// Read WebSocket port from environment variable set by claude-hydra-server.js
+// Read ports from environment variables set by claude-hydra-server.js
 const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
+const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3000', 10);
 
 let wss: WebSocketServer | null = null;
 let sessionManager: SessionManager;
@@ -50,10 +51,8 @@ function initWebSocketServer() {
 							branchName = data.branchName;
 						const adoptExisting = data.adoptExisting || false;
 
-						// Determine base URL for hooks to call back
-						const baseUrl = process.env.NODE_ENV === 'production'
-							? 'http://localhost:4173'
-							: 'http://localhost:5173';
+						// Determine base URL for hooks to call back using actual HTTP port
+						const baseUrl = `http://localhost:${HTTP_PORT}`;
 
 						sessionId = ptyManager.createSession(
 							data.branchName,
