@@ -7,6 +7,7 @@ export interface TerminalTab {
 	branchName: string;
 	active: boolean;
 	state: 'ready' | 'running';
+	adoptExisting: boolean;
 }
 
 function createTerminalsStore() {
@@ -14,12 +15,12 @@ function createTerminalsStore() {
 
 	return {
 		subscribe,
-		addTab: (id: string, branchName: string) => {
+		addTab: (id: string, branchName: string, adoptExisting: boolean = false) => {
 			update(tabs => {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
 				// Add new tab
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'ready' }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'ready', adoptExisting }];
 			});
 		},
 		removeTab: (id: string) => {

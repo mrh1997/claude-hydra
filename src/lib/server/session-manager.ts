@@ -46,11 +46,37 @@ export class SessionManager {
 	 * Creates a new isolated session with its own git worktree and branch.
 	 * @param sessionId - Unique identifier for this session
 	 * @param branchName - User-provided branch name
+	 * @param adoptExisting - If true, adopt an existing worktree instead of creating a new one
 	 * @returns Session information including the worktree path to use as cwd
 	 */
-	createSession(sessionId: string, branchName: string): SessionInfo {
+	createSession(sessionId: string, branchName: string, adoptExisting: boolean = false): SessionInfo {
 		const worktreePath = join(this.baseDir, branchName);
 
+		// If adopting existing worktree
+		if (adoptExisting) {
+			// Verify branch exists
+			if (!this.branchExists(branchName)) {
+				throw new Error(`Cannot adopt: Branch '${branchName}' does not exist`);
+			}
+
+			// Verify worktree path exists
+			if (!existsSync(worktreePath)) {
+				throw new Error(`Cannot adopt: Worktree directory '${branchName}' does not exist`);
+			}
+
+			const sessionInfo: SessionInfo = {
+				sessionId,
+				branchName,
+				worktreePath
+			};
+
+			this.sessions.set(sessionId, sessionInfo);
+			console.log(`Adopted existing session ${sessionId}: branch=${branchName}, path=${worktreePath}`);
+
+			return sessionInfo;
+		}
+
+		// Normal flow: create new worktree and branch
 		// Check if branch already exists
 		if (this.branchExists(branchName)) {
 			throw new Error(`Branch '${branchName}' already exists`);
@@ -192,6 +218,82 @@ export class SessionManager {
 	destroyAllSessions(): void {
 		for (const [sessionId] of this.sessions) {
 			this.destroySession(sessionId);
+		}
+	}
+
+	/**
+	 * Discovers existing claude-hydra worktrees from previous sessions.
+	 * @returns Array of worktrees in .claude-hydra/ that match the pattern
+	 */
+	discoverExistingWorktrees(): Array<{ branchName: string; worktreePath: string }> {
+		try {
+			// Get all worktrees in porcelain format
+			const output = execSync('git worktree list --porcelain', {
+				cwd: this.repoRoot,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			});
+
+			const worktrees: Array<{ branchName: string; worktreePath: string }> = [];
+			const lines = output.split('\n');
+
+			let currentWorktree: { path?: string; branch?: string } = {};
+
+			for (const line of lines) {
+				if (line.startsWith('worktree ')) {
+					// Start of new worktree entry
+					if (currentWorktree.path && currentWorktree.branch) {
+						// Process previous worktree
+						this.processWorktree(currentWorktree, worktrees);
+					}
+					currentWorktree = { path: line.substring('worktree '.length).trim() };
+				} else if (line.startsWith('branch ')) {
+					// Branch reference
+					const branchRef = line.substring('branch '.length).trim();
+					// Extract branch name from refs/heads/branch-name
+					if (branchRef.startsWith('refs/heads/')) {
+						currentWorktree.branch = branchRef.substring('refs/heads/'.length);
+					}
+				}
+			}
+
+			// Process last worktree
+			if (currentWorktree.path && currentWorktree.branch) {
+				this.processWorktree(currentWorktree, worktrees);
+			}
+
+			console.log(`Discovered ${worktrees.length} existing claude-hydra worktree(s)`);
+			return worktrees;
+		} catch (error: any) {
+			console.error('Failed to discover existing worktrees:', error);
+			return [];
+		}
+	}
+
+	private processWorktree(
+		worktree: { path?: string; branch?: string },
+		results: Array<{ branchName: string; worktreePath: string }>
+	): void {
+		if (!worktree.path || !worktree.branch) return;
+
+		// Normalize paths to use forward slashes for consistent comparison
+		const normalizedWorktreePath = worktree.path.replace(/\\/g, '/');
+		const claudeHydraDir = join(this.repoRoot, '.claude-hydra').replace(/\\/g, '/');
+
+		// Check if this worktree is in .claude-hydra/ directory
+		if (!normalizedWorktreePath.startsWith(claudeHydraDir)) return;
+
+		// Extract expected branch name from path: .claude-hydra/<branch-name>
+		const relativePath = normalizedWorktreePath.substring(claudeHydraDir.length + 1);
+		const expectedBranchName = relativePath.split('/')[0];
+
+		// Verify branch name matches
+		if (worktree.branch === expectedBranchName) {
+			results.push({
+				branchName: worktree.branch,
+				worktreePath: worktree.path  // Use original path for consistency
+			});
+			console.log(`  Found: ${worktree.branch} at ${worktree.path}`);
 		}
 	}
 

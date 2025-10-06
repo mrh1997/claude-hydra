@@ -5,6 +5,7 @@
 	export let terminalId: string;
 	export let active: boolean = false;
 	export let branchName: string;
+	export let adoptExisting: boolean = false;
 
 	const dispatch = createEventDispatcher();
 	const websocketPort = getContext<number>('websocketPort');
@@ -126,7 +127,7 @@
 		ws.onopen = () => {
 			console.log('WebSocket connected');
 			// Request new terminal session with branch name
-			ws.send(JSON.stringify({ type: 'create', branchName }));
+			ws.send(JSON.stringify({ type: 'create', branchName, adoptExisting }));
 		};
 
 		ws.onmessage = (event) => {

@@ -146,11 +146,11 @@ export class PtyManager {
 		return this.sessions.get(sessionId)?.branchName;
 	}
 
-	createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string): string {
+	createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false): string {
 		const sessionId = uuidv4();
 
 		// Create isolated git worktree session
-		const sessionInfo = this.sessionManager.createSession(sessionId, branchName);
+		const sessionInfo = this.sessionManager.createSession(sessionId, branchName, adoptExisting);
 
 		// Setup Claude hooks
 		this.setupClaudeHooks(sessionInfo.worktreePath, branchName);

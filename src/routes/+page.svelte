@@ -1,10 +1,25 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Terminal from '$lib/components/Terminal.svelte';
 	import TerminalTabs from '$lib/components/TerminalTabs.svelte';
 	import { terminals } from '$lib/stores/terminals';
 
+	export let data;
+
 	let terminalData: Map<string, string> = new Map();
 	let terminalTabs: TerminalTabs;
+
+	// Auto-restore discovered worktrees on mount
+	onMount(() => {
+		if (data.existingWorktrees && data.existingWorktrees.length > 0) {
+			console.log('Restoring', data.existingWorktrees.length, 'existing worktree(s)');
+			data.existingWorktrees.forEach((worktree: { branchName: string }) => {
+				const id = crypto.randomUUID();
+				terminals.addTab(id, worktree.branchName, true); // adoptExisting = true
+				terminalData = new Map(terminalData).set(id, worktree.branchName);
+			});
+		}
+	});
 
 	function handleNewTab(id: string, branchName: string) {
 		terminalData = new Map(terminalData).set(id, branchName);
@@ -37,7 +52,7 @@
 		{:else}
 			{#each $terminals as tab (tab.id)}
 				{@const branchName = terminalData.get(tab.id) || tab.branchName}
-				<Terminal terminalId={tab.id} active={tab.active} {branchName} on:exit={handleTerminalExit} />
+				<Terminal terminalId={tab.id} active={tab.active} {branchName} adoptExisting={tab.adoptExisting} on:exit={handleTerminalExit} />
 			{/each}
 		{/if}
 	</div>

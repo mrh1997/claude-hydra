@@ -20,6 +20,9 @@ try {
 	process.exit(1);
 }
 
+// Export sessionManager for use in other modules (e.g., +page.server.ts)
+export { sessionManager };
+
 // Initialize WebSocket server
 function initWebSocketServer() {
 	if (wss) return;
@@ -45,33 +48,35 @@ function initWebSocketServer() {
 							}
 
 							branchName = data.branchName;
+						const adoptExisting = data.adoptExisting || false;
 
-							// Determine base URL for hooks to call back
-							const baseUrl = process.env.NODE_ENV === 'production'
-								? 'http://localhost:4173'
-								: 'http://localhost:5173';
+						// Determine base URL for hooks to call back
+						const baseUrl = process.env.NODE_ENV === 'production'
+							? 'http://localhost:4173'
+							: 'http://localhost:5173';
 
-							sessionId = ptyManager.createSession(
-								data.branchName,
-								(sid, output) => {
-									// Send terminal output to client
-									if (ws.readyState === ws.OPEN) {
-										ws.send(JSON.stringify({ type: 'data', data: output }));
-									}
-								},
-								(sid) => {
-									// Handle terminal exit
-									if (ws.readyState === ws.OPEN) {
-										ws.send(JSON.stringify({ type: 'exit' }));
-									}
-								},
-								baseUrl
-							);
+						sessionId = ptyManager.createSession(
+							data.branchName,
+							(sid, output) => {
+								// Send terminal output to client
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({ type: 'data', data: output }));
+								}
+							},
+							(sid) => {
+								// Handle terminal exit
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({ type: 'exit' }));
+								}
+							},
+							baseUrl,
+							adoptExisting
+						);
 
-							// Register this connection with the branch name
-							registerConnection(branchName, ws);
+						// Register this connection with the branch name
+						registerConnection(branchName, ws);
 
-							ws.send(JSON.stringify({ type: 'created', sessionId, branchName }));
+						ws.send(JSON.stringify({ type: 'created', sessionId, branchName }));
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
 							console.error('Failed to create session:', errorMessage);
@@ -150,7 +155,9 @@ function initWebSocketServer() {
 		ws.on('close', () => {
 			console.log('WebSocket client disconnected');
 			if (sessionId) {
-				ptyManager.destroy(sessionId);
+				// Preserve worktree on disconnect for auto-restore on next startup
+				// The PTY process is killed, but the worktree/branch is preserved
+				ptyManager.destroy(sessionId, true);
 			}
 			if (branchName) {
 				unregisterConnection(branchName);
