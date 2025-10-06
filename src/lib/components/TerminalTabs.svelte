@@ -324,7 +324,8 @@
 			</div>
 		{/each}
 		<button class="new-tab-btn" on:click={handleNewTabClick} aria-label="New terminal">
-			+
+			<span class="new-tab-icon">+</span>
+			<span class="new-tab-label">(add working tree)</span>
 		</button>
 	</div>
 	{#if version}
@@ -338,19 +339,21 @@
 <style>
 	.tabs-container {
 		background-color: #2d2d2d;
-		border-bottom: 1px solid #1e1e1e;
+		border-right: 1px solid #1e1e1e;
 		display: flex;
-		align-items: center;
-		height: 40px;
-		overflow-x: auto;
-		overflow-y: hidden;
+		flex-direction: column;
+		align-items: stretch;
+		width: min(200px, 30vw);
+		overflow-y: auto;
+		overflow-x: hidden;
 	}
 
 	.tabs {
 		display: flex;
-		gap: 2px;
-		padding: 0 8px;
-		height: 100%;
+		flex-direction: column;
+		gap: 0;
+		padding: 8px 0;
+		width: 100%;
 	}
 
 	.tab {
@@ -358,23 +361,33 @@
 		align-items: center;
 		gap: 8px;
 		padding: 0 12px;
-		background-color: #252525;
+		background-color: #2d2d2d;
 		border: none;
 		cursor: pointer;
 		user-select: none;
 		white-space: nowrap;
 		transition: background-color 0.2s;
-		min-width: 120px;
-		max-width: 200px;
+		height: 80px;
+		width: 100%;
+		position: relative;
+	}
+
+	.tab::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 12px;
+		right: 12px;
+		border-bottom: 0.5px dashed #666666;
 	}
 
 	.tab:hover {
-		background-color: #2d2d2d;
+		background-color: #252525;
 	}
 
 	.tab.active {
 		background-color: #1e1e1e;
-		border-bottom: 2px solid #007acc;
+		border-right: 2px solid #007acc;
 	}
 
 	.state-indicator {
@@ -451,20 +464,35 @@
 		border: none;
 		color: #cccccc;
 		cursor: pointer;
-		font-size: 20px;
-		padding: 0 12px;
-		height: 100%;
+		padding: 0;
+		height: 80px;
+		width: 100%;
+		flex-shrink: 0;
 		transition: background-color 0.2s;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
 	}
 
 	.new-tab-btn:hover {
 		background-color: #2d2d2d;
 	}
 
+	.new-tab-icon {
+		font-size: 20px;
+	}
+
+	.new-tab-label {
+		font-size: 11px;
+		color: #999999;
+	}
+
 	.error-banner {
 		position: absolute;
-		top: 40px;
-		left: 0;
+		top: 0;
+		left: min(200px, 30vw);
 		right: 0;
 		background-color: #5a1d1d;
 		border-bottom: 1px solid #be1100;
@@ -476,8 +504,8 @@
 
 	.version-indicator {
 		position: absolute;
-		top: 2px;
-		right: 8px;
+		bottom: 8px;
+		left: 8px;
 		font-size: 12px;
 		color: rgba(255, 255, 255, 0.3);
 		font-family: monospace;

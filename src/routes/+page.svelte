@@ -140,7 +140,7 @@
 <style>
 	.app {
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		height: 100vh;
 		width: 100vw;
 		overflow: hidden;
