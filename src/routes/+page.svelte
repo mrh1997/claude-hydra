@@ -14,9 +14,12 @@
 	let managementWs: WebSocket | null = null;
 	let portInUse = false;
 	let serverShutdown = false;
+	let reconnectTimeout: number | null = null;
 
-	// Auto-restore discovered worktrees on mount
-	onMount(() => {
+	// Check if we're in development mode
+	const isDev = import.meta.env.DEV;
+
+	function establishManagementConnection() {
 		// Establish management connection
 		managementWs = new WebSocket(`ws://localhost:${managementPort}`);
 
@@ -25,7 +28,13 @@
 			// Connection accepted - server is available
 			portInUse = false;
 
-			// Auto-restore discovered worktrees
+			// Clear any pending reconnect timeout since we're connected
+			if (reconnectTimeout) {
+				clearTimeout(reconnectTimeout);
+				reconnectTimeout = null;
+			}
+
+			// Auto-restore discovered worktrees (only on initial connection)
 			if (data.existingWorktrees && data.existingWorktrees.length > 0) {
 				console.log('Restoring', data.existingWorktrees.length, 'existing worktree(s)');
 				data.existingWorktrees.forEach((worktree: { branchName: string }) => {
@@ -33,6 +42,8 @@
 					terminals.addTab(id, worktree.branchName, true); // adoptExisting = true
 					terminalData = new Map(terminalData).set(id, worktree.branchName);
 				});
+				// Clear the data so we don't restore again on reconnect
+				data.existingWorktrees = [];
 			}
 		};
 
@@ -46,13 +57,44 @@
 				console.log('Management connection rejected - port in use');
 				portInUse = true;
 			} else if (!portInUse) {
-				// Normal close - server shut down
-				console.log('Management connection closed - server shut down');
-				serverShutdown = true;
-				// Attempt to close the window/tab
-				window.close();
+				if (isDev) {
+					// In development, wait 2 seconds before shutting down to handle HMR
+					console.log('[page] Management connection closed - waiting 2s before shutdown (HMR tolerance)');
+
+					// Clear any existing reconnect timeout
+					if (reconnectTimeout) {
+						clearTimeout(reconnectTimeout);
+					}
+
+					// Try to reconnect after a brief delay
+					reconnectTimeout = window.setTimeout(() => {
+						console.log('[page] Attempting to reconnect management connection...');
+						establishManagementConnection();
+
+						// Check after another second if reconnection succeeded
+						setTimeout(() => {
+							if (!managementWs || managementWs.readyState !== WebSocket.OPEN) {
+								console.log('[page] Reconnection failed - server shut down');
+								serverShutdown = true;
+								window.close();
+							} else {
+								console.log('[page] Reconnection successful - server still running');
+							}
+						}, 1000);
+					}, 2000);
+				} else {
+					// Production: immediate shutdown
+					console.log('Management connection closed - server shut down');
+					serverShutdown = true;
+					window.close();
+				}
 			}
 		};
+	}
+
+	// Auto-restore discovered worktrees on mount
+	onMount(() => {
+		establishManagementConnection();
 
 		// Handle window/tab close
 		const handleBeforeUnload = (event: BeforeUnloadEvent) => {

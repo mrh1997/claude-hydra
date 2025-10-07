@@ -14,6 +14,10 @@ let mgmtWss: WebSocketServer | null = null;
 let sessionManager: SessionManager;
 let ptyManager: PtyManager;
 let hasManagementClient = false;
+let shutdownTimeout: NodeJS.Timeout | null = null;
+
+// Check if we're in development mode (set by claude-hydra-server.js)
+const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
 // Initialize SessionManager - will throw if not in a git repository
 try {
@@ -191,11 +195,28 @@ function initManagementWebSocketServer() {
 		hasManagementClient = true;
 		console.log('Management client connected');
 
+		// Cancel any pending shutdown timeout since client (re)connected
+		if (shutdownTimeout) {
+			console.log('Cancelling pending shutdown - client reconnected');
+			clearTimeout(shutdownTimeout);
+			shutdownTimeout = null;
+		}
+
 		ws.on('close', () => {
-			console.log('Management client disconnected - shutting down server');
 			hasManagementClient = false;
-			// Client closed, shut down server
-			process.exit(0);
+
+			if (isDev) {
+				// In development, wait 2 seconds before shutting down to handle HMR
+				console.log('Management client disconnected - waiting 2s before shutdown (HMR tolerance)');
+				shutdownTimeout = setTimeout(() => {
+					console.log('No reconnection within 2s - shutting down server');
+					process.exit(0);
+				}, 2000);
+			} else {
+				// In production, shut down immediately
+				console.log('Management client disconnected - shutting down server');
+				process.exit(0);
+			}
 		});
 
 		ws.on('error', (error) => {
