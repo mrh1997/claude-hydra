@@ -154,6 +154,79 @@ export class PtyManager {
 		}
 	}
 
+	private executeAutoInitScript(worktreePath: string, onData: (data: string) => void): void {
+		const mainRepoRoot = process.cwd();
+		const isWindows = process.platform === 'win32';
+
+		// Define script priorities based on platform
+		const scriptNames = isWindows
+			? ['claude-hydra-autoinit.ps1', 'claude-hydra-autoinit.cmd', 'claude-hydra-autoinit.sh']
+			: ['claude-hydra-autoinit.sh'];
+
+		// Find first existing script
+		let scriptPath: string | null = null;
+		let scriptType: 'ps1' | 'cmd' | 'sh' | null = null;
+
+		for (const scriptName of scriptNames) {
+			const candidatePath = join(mainRepoRoot, scriptName);
+			if (existsSync(candidatePath)) {
+				scriptPath = candidatePath;
+				scriptType = scriptName.endsWith('.ps1') ? 'ps1' : scriptName.endsWith('.cmd') ? 'cmd' : 'sh';
+				break;
+			}
+		}
+
+		// If no script found, return silently
+		if (!scriptPath || !scriptType) {
+			return;
+		}
+
+		// Execute the script with worktree as cwd
+		try {
+			let command: string;
+			if (scriptType === 'ps1') {
+				command = `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`;
+			} else if (scriptType === 'cmd') {
+				command = `cmd /c "${scriptPath}"`;
+			} else {
+				command = `bash "${scriptPath}"`;
+			}
+
+			console.log(`Executing auto-init script: ${scriptPath} (cwd: ${worktreePath})`);
+			onData(`\r\n[Running auto-init script: ${scriptPath}]\r\n`);
+
+			const output = execSync(command, {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			});
+
+			// Send output to terminal (convert LF to CRLF for xterm.js)
+			if (output) {
+				onData(output.replace(/\r?\n/g, '\r\n'));
+			}
+
+			onData(`\r\n[Auto-init script completed]\r\n\r\n`);
+			console.log(`Auto-init script completed successfully`);
+		} catch (error: any) {
+			console.error(`Auto-init script failed:`, error);
+			const errorMessage = error.message || String(error);
+			const errorOutput = error.stdout || '';
+			const errorStderr = error.stderr || '';
+
+			// Send error output to terminal (convert LF to CRLF for xterm.js)
+			if (errorOutput) {
+				onData(errorOutput.replace(/\r?\n/g, '\r\n'));
+			}
+			if (errorStderr) {
+				onData(errorStderr.replace(/\r?\n/g, '\r\n'));
+			}
+			onData(`\r\n[Auto-init script failed: ${errorMessage}]\r\n\r\n`);
+
+			// Don't throw - continue with session creation even if script fails
+		}
+	}
+
 	getBranchName(sessionId: string): string | undefined {
 		return this.sessions.get(sessionId)?.branchName;
 	}
@@ -166,6 +239,11 @@ export class PtyManager {
 
 		// Setup Claude hooks
 		this.setupClaudeHooks(sessionInfo.worktreePath, branchName);
+
+		// Execute auto-init script only when creating new worktree (not when adopting existing)
+		if (!adoptExisting) {
+			this.executeAutoInitScript(sessionInfo.worktreePath, (data) => onData(sessionId, data));
+		}
 
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();
