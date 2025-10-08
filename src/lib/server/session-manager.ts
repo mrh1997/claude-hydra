@@ -5,6 +5,18 @@ import { homedir } from 'os';
 import { createHash } from 'crypto';
 
 /**
+ * Synchronous sleep function that works cross-platform without shell commands.
+ * @param seconds - Number of seconds to sleep
+ */
+function sleepSync(seconds: number): void {
+	const start = Date.now();
+	const end = start + (seconds * 1000);
+	while (Date.now() < end) {
+		// Busy-wait
+	}
+}
+
+/**
  * SessionManager manages isolated Claude Code sessions using git worktrees.
  *
  * Each terminal tab gets its own:
@@ -156,7 +168,7 @@ export class SessionManager {
 				if (attempt < maxAttempts - 1) {
 					console.warn(`git worktree remove attempt ${attempt + 1} failed, retrying...`);
 					// Wait a bit for file handles to be released (longer on Windows)
-					execSync(`timeout /t ${retryDelay} /nobreak > nul 2>&1 || sleep ${retryDelay}`, { stdio: 'ignore' });
+					sleepSync(retryDelay);
 				} else {
 					console.warn(`git worktree remove failed after ${maxAttempts} attempts, attempting manual deletion: ${error}`);
 				}
@@ -189,7 +201,7 @@ export class SessionManager {
 					if (attempt < manualAttempts - 1) {
 						console.warn(`Manual deletion attempt ${attempt + 1} failed, retrying...`);
 						// Wait for file handles to be released
-						execSync(`timeout /t ${manualRetryDelay} /nobreak > nul 2>&1 || sleep ${manualRetryDelay}`, { stdio: 'ignore' });
+						sleepSync(manualRetryDelay);
 					} else {
 						console.error(`Manual deletion failed after ${manualAttempts} attempts: ${deleteError}`);
 					}

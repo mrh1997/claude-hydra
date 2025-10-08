@@ -35,7 +35,19 @@ export class PtyManager {
 			// On Windows, use 'where' to find the executable
 			const command = process.platform === 'win32' ? 'where claude' : 'which claude';
 			const output = execSync(command, { encoding: 'utf8' });
-			this.claudePath = output.trim().split('\n')[0]; // Get first match
+			const paths = output.trim().split('\n');
+
+			// On Windows, prefer .cmd or .exe versions for node-pty compatibility
+			if (process.platform === 'win32') {
+				const cmdPath = paths.find(p => p.endsWith('.cmd') || p.endsWith('.exe'));
+				if (cmdPath) {
+					this.claudePath = cmdPath;
+					return this.claudePath;
+				}
+			}
+
+			// Fallback to first match
+			this.claudePath = paths[0];
 			return this.claudePath;
 		} catch (error) {
 			throw new Error('Claude executable not found in PATH. Please ensure Claude Code is installed.');
