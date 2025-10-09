@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { terminals } from '$lib/stores/terminals';
+	import { gitBackends } from '$lib/stores/gitBackends';
 	import { v4 as uuidv4 } from 'uuid';
 	import { getContext } from 'svelte';
 	import BranchNameDialog from './BranchNameDialog.svelte';
@@ -8,6 +9,16 @@
 	import ConfirmationDialog from './ConfirmationDialog.svelte';
 
 	const version = getContext<string>('version');
+
+	// Helper function to get GitBackend for a sessionId
+	function getGitBackend(sessionId: string | null) {
+		if (!sessionId) return null;
+		let backend = null;
+		gitBackends.subscribe(backends => {
+			backend = backends.get(sessionId) || null;
+		})();
+		return backend;
+	}
 
 	export let onNewTab: (id: string, branchName: string) => void = () => {};
 
@@ -87,99 +98,45 @@
 	}
 
 	async function getGitStatus(sessionId: string): Promise<{ hasUncommittedChanges: boolean; hasUnmergedCommits: boolean } | null> {
-		return new Promise((resolve) => {
-			const ws = new WebSocket('ws://localhost:3001');
-			let timeoutId: number;
+		const backend = getGitBackend(sessionId);
+		if (!backend) {
+			console.error('No GitBackend found for session', sessionId);
+			return null;
+		}
 
-			ws.onopen = () => {
-				// Send sessionId in message to check existing session
-				ws.send(JSON.stringify({ type: 'getGitStatus', sessionId }));
-				timeoutId = window.setTimeout(() => {
-					ws.close();
-					resolve(null);
-				}, 5000);
-			};
-
-			ws.onmessage = (event) => {
-				const message = JSON.parse(event.data);
-				if (message.type === 'gitStatus') {
-					clearTimeout(timeoutId);
-					ws.close();
-					resolve(message.status);
-				} else if (message.type === 'error') {
-					clearTimeout(timeoutId);
-					ws.close();
-					resolve(null);
-				}
-			};
-
-			ws.onerror = () => {
-				clearTimeout(timeoutId);
-				resolve(null);
-			};
-		});
+		try {
+			return await backend.getGitStatus();
+		} catch (error) {
+			console.error('Failed to get git status:', error);
+			return null;
+		}
 	}
 
 	async function performMerge(sessionId: string, commitMessage?: string): Promise<{ success: boolean; error?: string }> {
-		return new Promise((resolve) => {
-			const ws = new WebSocket('ws://localhost:3001');
-			let timeoutId: number;
+		const backend = getGitBackend(sessionId);
+		if (!backend) {
+			return { success: false, error: 'No backend connection' };
+		}
 
-			ws.onopen = () => {
-				ws.send(JSON.stringify({ type: 'merge', sessionId, commitMessage }));
-				timeoutId = window.setTimeout(() => {
-					ws.close();
-					resolve({ success: false, error: 'Timeout' });
-				}, 10000);
-			};
-
-			ws.onmessage = (event) => {
-				const message = JSON.parse(event.data);
-				if (message.type === 'mergeResult') {
-					clearTimeout(timeoutId);
-					ws.close();
-					resolve(message.result);
-				}
-			};
-
-			ws.onerror = () => {
-				clearTimeout(timeoutId);
-				resolve({ success: false, error: 'Connection error' });
-			};
-		});
+		try {
+			return await backend.performMerge(commitMessage);
+		} catch (error: any) {
+			return { success: false, error: error.message || 'Merge failed' };
+		}
 	}
 
 	async function performRestart(sessionId: string): Promise<{ success: boolean; error?: string }> {
-		return new Promise((resolve) => {
-			const ws = new WebSocket('ws://localhost:3001');
-			let timeoutId: number;
+		const backend = getGitBackend(sessionId);
+		if (!backend) {
+			return { success: false, error: 'No backend connection' };
+		}
 
-			ws.onopen = () => {
-				ws.send(JSON.stringify({ type: 'restart', sessionId }));
-				timeoutId = window.setTimeout(() => {
-					ws.close();
-					resolve({ success: false, error: 'Timeout' });
-				}, 10000);
-			};
-
-			ws.onmessage = (event) => {
-				const message = JSON.parse(event.data);
-				if (message.type === 'restarted') {
-					clearTimeout(timeoutId);
-					ws.close();
-					resolve({ success: true });
-				} else if (message.type === 'error') {
-					clearTimeout(timeoutId);
-					ws.close();
-					resolve({ success: false, error: message.error });
-				}
-			};
-
-			ws.onerror = () => {
-				clearTimeout(timeoutId);
-				resolve({ success: false, error: 'Connection error' });
-			};
-		});
+		try {
+			await backend.restart();
+			return { success: true };
+		} catch (error: any) {
+			return { success: false, error: error.message || 'Restart failed' };
+		}
 	}
 
 	function handleCloseDialogCancel() {
@@ -242,27 +199,41 @@
 		const tab = $terminals.find(t => t.id === pendingCloseTabId);
 		if (!tab || !tab.sessionId) return;
 
+		const backend = getGitBackend(tab.sessionId);
+		if (!backend) {
+			closeError = 'No backend connection';
+			setTimeout(() => closeError = '', 5000);
+			pendingCloseTabId = null;
+			return;
+		}
+
 		// Check if this commit is part of a merge flow or standalone
 		const shouldMergeAfter = tab.gitStatus?.hasUnmergedCommits && !tab.gitStatus?.isBehindBase;
 
-		if (shouldMergeAfter) {
-			// Merge flow - commit and then merge
-			const result = await performMerge(tab.sessionId, commitMessage);
+		try {
+			if (shouldMergeAfter) {
+				// Merge flow - commit and then merge
+				const result = await backend.performMerge(commitMessage);
 
-			if (!result.success) {
-				closeError = result.error || 'Merge failed';
-				setTimeout(() => closeError = '', 5000);
+				if (!result.success) {
+					closeError = result.error || 'Merge failed';
+					setTimeout(() => closeError = '', 5000);
+				}
+			} else {
+				// Standalone commit - just commit without merging or closing
+				const result = await backend.commit(commitMessage);
+
+				if (!result.success) {
+					closeError = result.error || 'Commit failed';
+					setTimeout(() => closeError = '', 5000);
+				}
 			}
-			pendingCloseTabId = null;
-		} else {
-			// Standalone commit - just commit without merging or closing
-			const ws = new WebSocket('ws://localhost:3001');
-			ws.onopen = () => {
-				ws.send(JSON.stringify({ type: 'commit', sessionId: tab.sessionId, commitMessage }));
-				ws.close();
-			};
-			pendingCloseTabId = null;
+		} catch (error: any) {
+			closeError = error.message || 'Operation failed';
+			setTimeout(() => closeError = '', 5000);
 		}
+
+		pendingCloseTabId = null;
 	}
 
 	function handleCommitDialogCancel() {
@@ -333,55 +304,50 @@
 		event.stopPropagation();
 		if (!tab.sessionId) return;
 
-		// Send rebase request
-		const ws = new WebSocket('ws://localhost:3001');
-		let timeoutId: number;
-
-		ws.onopen = () => {
-			ws.send(JSON.stringify({ type: 'rebase', sessionId: tab.sessionId }));
-			timeoutId = window.setTimeout(() => {
-				ws.close();
-			}, 10000);
-		};
-
-		ws.onmessage = (event) => {
-			const message = JSON.parse(event.data);
-			if (message.type === 'rebaseResult') {
-				clearTimeout(timeoutId);
-				ws.close();
-				if (!message.result.success) {
-					closeError = message.result.error || 'Rebase failed';
-					setTimeout(() => closeError = '', 5000);
-				}
-			}
-		};
-
-		ws.onerror = () => {
-			clearTimeout(timeoutId);
-			closeError = 'Rebase connection error';
+		const backend = getGitBackend(tab.sessionId);
+		if (!backend) {
+			closeError = 'No backend connection';
 			setTimeout(() => closeError = '', 5000);
-		};
+			return;
+		}
+
+		try {
+			const result = await backend.performRebase();
+			if (!result.success) {
+				closeError = result.error || 'Rebase failed';
+				setTimeout(() => closeError = '', 5000);
+			}
+		} catch (error: any) {
+			closeError = error.message || 'Rebase failed';
+			setTimeout(() => closeError = '', 5000);
+		}
 	}
 
-	function handleDiscardConfirm() {
+	async function handleDiscardConfirm() {
 		showDiscardConfirmDialog = false;
 		if (!pendingDiscardTab || !pendingDiscardTab.sessionId) return;
 
-		// Send discard request via a temporary WebSocket connection
-		// Note: Each terminal has its own persistent WebSocket in Terminal.svelte
-		// This is just a one-off message to trigger the git operation
-		const ws = new WebSocket('ws://localhost:3001');
-		ws.onopen = () => {
-			if (isDiscardingCommits) {
-				// Discard pending commits
-				ws.send(JSON.stringify({ type: 'resetToBase', sessionId: pendingDiscardTab.sessionId }));
-			} else {
-				// Discard uncommitted local changes
-				ws.send(JSON.stringify({ type: 'discardChanges', sessionId: pendingDiscardTab.sessionId }));
+		const backend = getGitBackend(pendingDiscardTab.sessionId);
+		if (!backend) {
+			closeError = 'No backend connection';
+			setTimeout(() => closeError = '', 5000);
+			pendingDiscardTab = null;
+			return;
+		}
+
+		try {
+			const result = isDiscardingCommits
+				? await backend.resetToBase()
+				: await backend.discardChanges();
+
+			if (!result.success) {
+				closeError = result.error || 'Operation failed';
+				setTimeout(() => closeError = '', 5000);
 			}
-			// Close this temporary connection after message is sent
-			setTimeout(() => ws.close(), 100);
-		};
+		} catch (error: any) {
+			closeError = error.message || 'Operation failed';
+			setTimeout(() => closeError = '', 5000);
+		}
 
 		pendingDiscardTab = null;
 	}

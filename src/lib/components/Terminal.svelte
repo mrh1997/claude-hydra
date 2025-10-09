@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy, createEventDispatcher, getContext } from 'svelte';
 	import { terminals } from '$lib/stores/terminals';
+	import { GitBackend } from '$lib/GitBackend';
+	import { gitBackends } from '$lib/stores/gitBackends';
 
 	export let terminalId: string;
 	export let active: boolean = false;
@@ -15,6 +17,7 @@
 	let fitAddon: any;
 	let ws: WebSocket;
 	let sessionId: string | null = null;
+	let gitBackend: GitBackend | null = null;
 
 	onMount(async () => {
 		// Dynamic imports to avoid SSR issues
@@ -134,10 +137,28 @@
 			try {
 				const message = JSON.parse(event.data);
 
+				// Try to handle message with GitBackend first
+				if (gitBackend && gitBackend.handleMessage(message)) {
+					return; // Message was handled by GitBackend
+				}
+
+				// Handle non-git messages
 				switch (message.type) {
 					case 'created':
 						sessionId = message.sessionId;
 						terminals.setSessionId(terminalId, sessionId);
+
+						// Create GitBackend instance for this session
+						gitBackend = new GitBackend(
+							sessionId,
+							ws,
+							(gitStatus) => {
+								// Callback when git status is updated
+								terminals.updateGitStatus(sessionId, gitStatus);
+							}
+						);
+						gitBackends.register(sessionId, gitBackend);
+
 						// Immediately send the actual terminal size to the PTY
 						if (terminal && fitAddon) {
 							const dims = fitAddon.proposeDimensions();
@@ -158,12 +179,6 @@
 					case 'state':
 						if (sessionId) {
 							terminals.updateState(sessionId, message.state);
-						}
-						break;
-
-					case 'gitBranchStatus':
-						if (sessionId) {
-							terminals.updateGitStatus(sessionId, message.gitStatus);
 						}
 						break;
 
@@ -196,6 +211,8 @@
 		if (ws) {
 			if (sessionId) {
 				ws.send(JSON.stringify({ type: 'destroy' }));
+				// Unregister GitBackend
+				gitBackends.unregister(sessionId);
 			}
 			ws.close();
 		}
