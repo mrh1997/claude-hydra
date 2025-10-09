@@ -207,29 +207,16 @@
 			return;
 		}
 
-		// Check if this commit is part of a merge flow or standalone
-		const shouldMergeAfter = tab.gitStatus?.hasUnmergedCommits && !tab.gitStatus?.isBehindBase;
-
+		// Always just commit (never merge)
 		try {
-			if (shouldMergeAfter) {
-				// Merge flow - commit and then merge
-				const result = await backend.performMerge(commitMessage);
+			const result = await backend.commit(commitMessage);
 
-				if (!result.success) {
-					closeError = result.error || 'Merge failed';
-					setTimeout(() => closeError = '', 5000);
-				}
-			} else {
-				// Standalone commit - just commit without merging or closing
-				const result = await backend.commit(commitMessage);
-
-				if (!result.success) {
-					closeError = result.error || 'Commit failed';
-					setTimeout(() => closeError = '', 5000);
-				}
+			if (!result.success) {
+				closeError = result.error || 'Commit failed';
+				setTimeout(() => closeError = '', 5000);
 			}
 		} catch (error: any) {
-			closeError = error.message || 'Operation failed';
+			closeError = error.message || 'Commit failed';
 			setTimeout(() => closeError = '', 5000);
 		}
 
@@ -280,14 +267,8 @@
 		event.stopPropagation();
 		if (!tab.sessionId) return;
 
-		// If uncommitted changes, show commit dialog first
-		if (tab.gitStatus?.hasUncommittedChanges) {
-			pendingCloseTabId = tab.id;
-			showCommitDialog = true;
-		} else {
-			// Directly merge
-			await performMerge(tab.sessionId);
-		}
+		// Directly merge (without committing uncommitted changes)
+		await performMerge(tab.sessionId);
 	}
 
 	async function handleResetToBaseClick(tab: any, event: MouseEvent) {
