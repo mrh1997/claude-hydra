@@ -140,24 +140,17 @@ function initWebSocketServer() {
 						// Accept sessionId from message payload or use connection's sessionId
 						const mergeSessionId = data.sessionId || sessionId;
 						if (mergeSessionId) {
-							// First, kill the PTY process to release file handles
-							// Skip worktree cleanup since merge will handle it
-							ptyManager.destroy(mergeSessionId, true);
+							const result = sessionManager.merge(mergeSessionId, data.commitMessage);
 
-							// Wait a bit for process to fully exit and file handles to be released
-							setTimeout(() => {
-								const result = sessionManager.merge(mergeSessionId, data.commitMessage);
+							ws.send(JSON.stringify({ type: 'mergeResult', result }));
 
-								ws.send(JSON.stringify({ type: 'mergeResult', result }));
-
-								// After successful merge, broadcast updated git status to all tabs
-								if (result.success) {
-									broadcastGitStatusToAll(
-										sessionManager.getAllSessions(),
-										(sid) => sessionManager.getGitStatus(sid)
-									);
-								}
-							}, 500);
+							// After successful merge, broadcast updated git status to all tabs
+							if (result.success) {
+								broadcastGitStatusToAll(
+									sessionManager.getAllSessions(),
+									(sid) => sessionManager.getGitStatus(sid)
+								);
+							}
 						}
 						break;
 
