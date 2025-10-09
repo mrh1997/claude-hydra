@@ -73,9 +73,11 @@ async function startServer() {
 	let portSource = 'auto-detected';
 
 	// Try to detect git repository root
+	// Use CLAUDE_HYDRA_REPO_DIR if set (from --dir parameter), otherwise use current directory
 	let repoRoot = null;
 	try {
-		repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8', stdio: 'pipe' }).trim();
+		const gitCwd = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
+		repoRoot = execSync('git rev-parse --show-toplevel', { cwd: gitCwd, encoding: 'utf8', stdio: 'pipe' }).trim();
 	} catch (error) {
 		// Not in a git repository or git not available - will use auto-detection
 	}

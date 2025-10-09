@@ -44,6 +44,9 @@ export class SessionManager {
 		// Get repository root
 		this.repoRoot = this.getRepoRoot(baseRepoDir);
 
+		// Ensure repository has at least one commit and a valid base branch
+		this.ensureValidBaseBranch();
+
 		// Get base branch (the branch we started from)
 		this.baseBranch = this.getBaseBranch();
 
@@ -336,6 +339,66 @@ export class SessionManager {
 				worktreePath: worktree.path  // Use original path for consistency
 			});
 			console.log(`  Found: ${worktree.branch} at ${worktree.path}`);
+		}
+	}
+
+	private ensureValidBaseBranch(): void {
+		try {
+			// Check if repository has any commits
+			try {
+				execSync('git rev-parse HEAD', {
+					cwd: this.repoRoot,
+					stdio: 'pipe'
+				});
+				// Repository has commits, check if we're on a branch
+				try {
+					const branch = execSync('git branch --show-current', {
+						cwd: this.repoRoot,
+						encoding: 'utf8',
+						stdio: 'pipe'
+					}).trim();
+
+					// If empty string, we're in detached HEAD state
+					if (!branch) {
+						console.log('Detached HEAD detected, creating "main" branch...');
+						execSync('git checkout -b main', {
+							cwd: this.repoRoot,
+							stdio: 'pipe'
+						});
+					}
+					// Otherwise we're on a branch already, keep using it
+				} catch (error) {
+					// Error getting branch, create main
+					console.log('Could not determine branch, creating "main" branch...');
+					execSync('git checkout -b main', {
+						cwd: this.repoRoot,
+						stdio: 'pipe'
+					});
+				}
+			} catch (error) {
+				// No commits exist, create initial commit and main branch
+				console.log('No commits found, creating initial commit and "main" branch...');
+				execSync('git commit --allow-empty -m "Initial commit"', {
+					cwd: this.repoRoot,
+					stdio: 'pipe'
+				});
+				// Try to rename current branch to main, or create main branch
+				try {
+					execSync('git branch -M main', {
+						cwd: this.repoRoot,
+						stdio: 'pipe'
+					});
+				} catch (renameError) {
+					// If rename fails, try checkout -b
+					execSync('git checkout -b main', {
+						cwd: this.repoRoot,
+						stdio: 'pipe'
+					});
+				}
+			}
+		} catch (error) {
+			console.error('Failed to ensure valid base branch:', error);
+			throw new Error('Failed to initialize repository with valid base branch');
 		}
 	}
 
