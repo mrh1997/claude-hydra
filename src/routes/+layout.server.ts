@@ -8,12 +8,14 @@ export async function load() {
 
 	if (dev) {
 		try {
+			const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
+
 			// Get first 4 characters of git hash
-			const gitHash = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim().substring(0, 4);
+			const gitHash = execSync('git rev-parse HEAD', { cwd: repoDir, encoding: 'utf8' }).trim().substring(0, 4);
 			version = gitHash;
 
 			// Check if MODVERSION file exists
-			const modVersionPath = join(process.cwd(), 'MODVERSION');
+			const modVersionPath = join(repoDir, 'MODVERSION');
 			if (existsSync(modVersionPath)) {
 				const modVersion = readFileSync(modVersionPath, 'utf8').trim();
 				if (modVersion) {

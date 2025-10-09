@@ -33,13 +33,16 @@ export class SessionManager {
 	private sessions = new Map<string, SessionInfo>();
 
 	constructor() {
+		// Use CLAUDE_HYDRA_REPO_DIR if set, otherwise use current directory
+		const baseRepoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
+
 		// Verify we're in a git repository
-		if (!this.isGitRepository()) {
+		if (!this.isGitRepository(baseRepoDir)) {
 			throw new Error('Not a git repository. Server must be started from within a git repository.');
 		}
 
 		// Get repository root
-		this.repoRoot = this.getRepoRoot();
+		this.repoRoot = this.getRepoRoot(baseRepoDir);
 
 		// Get base branch (the branch we started from)
 		this.baseBranch = this.getBaseBranch();
@@ -336,18 +339,19 @@ export class SessionManager {
 		}
 	}
 
-	private isGitRepository(): boolean {
+	private isGitRepository(cwd: string): boolean {
 		try {
-			execSync('git rev-parse --git-dir', { stdio: 'pipe' });
+			execSync('git rev-parse --git-dir', { cwd, stdio: 'pipe' });
 			return true;
 		} catch {
 			return false;
 		}
 	}
 
-	private getRepoRoot(): string {
+	private getRepoRoot(cwd: string): string {
 		try {
 			return execSync('git rev-parse --show-toplevel', {
+				cwd,
 				encoding: 'utf8',
 				stdio: 'pipe'
 			}).trim();

@@ -12,3 +12,4 @@ nul
 /.idea
 .claude/settings.local.json
 MODVERSION
+CLAUDE.local.md

@@ -61,7 +61,8 @@ export class PtyManager {
 		const settingsPath = join(claudeDir, 'settings.local.json');
 		const hookScriptPath = join(hooksDir, 'update-state.js');
 		// Use main repo's git directory, not worktree's
-		const gitExcludePath = join(process.cwd(), '.git', 'info', 'exclude');
+		const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
+		const gitExcludePath = join(repoDir, '.git', 'info', 'exclude');
 
 		// Create .claude/hooks directory if it doesn't exist
 		if (!existsSync(hooksDir)) {
@@ -129,7 +130,8 @@ export class PtyManager {
 	}
 
 	private updateGitExclude(): void {
-		const gitExcludePath = join(process.cwd(), '.git', 'info', 'exclude');
+		const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
+		const gitExcludePath = join(repoDir, '.git', 'info', 'exclude');
 		const entriesToAdd = [
 			'.claude/settings.local.json',
 			'.claude/hooks/update-state.js',
@@ -155,7 +157,7 @@ export class PtyManager {
 	}
 
 	private executeAutoInitScript(worktreePath: string, onData: (data: string) => void): void {
-		const mainRepoRoot = process.cwd();
+		const mainRepoRoot = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
 		const isWindows = process.platform === 'win32';
 
 		// Define script priorities based on platform

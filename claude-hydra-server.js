@@ -1,13 +1,62 @@
 #!/usr/bin/env node
 
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve, isAbsolute } from 'path';
 import { existsSync } from 'fs';
 import { spawn, execSync } from 'child_process';
 import { findAvailablePortTriple, readPortFromFile, isPortAvailable } from './src/lib/server/port-finder.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Parse -d/--dir parameter to change working directory
+function parseDirectoryArg() {
+	const args = process.argv.slice(2);
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		// Handle -d <path> or --dir <path>
+		if ((arg === '-d' || arg === '--dir') && i + 1 < args.length) {
+			return args[i + 1];
+		}
+
+		// Handle -d=<path> or --dir=<path>
+		if (arg.startsWith('-d=')) {
+			return arg.substring(3);
+		}
+		if (arg.startsWith('--dir=')) {
+			return arg.substring(6);
+		}
+	}
+
+	return null;
+}
+
+// Set repository directory if -d/--dir parameter is provided
+const specifiedDir = parseDirectoryArg();
+if (specifiedDir) {
+	// Convert to absolute path
+	const targetDir = isAbsolute(specifiedDir) ? specifiedDir : resolve(process.cwd(), specifiedDir);
+
+	// Validate directory exists
+	if (!existsSync(targetDir)) {
+		console.error(`Error: Directory does not exist: ${targetDir}`);
+		process.exit(1);
+	}
+
+	// Validate it's a git repository
+	try {
+		execSync('git rev-parse --git-dir', { cwd: targetDir, stdio: 'pipe' });
+	} catch (error) {
+		console.error(`Error: Not a git repository: ${targetDir}`);
+		process.exit(1);
+	}
+
+	// Store in environment variable for SessionManager and other components
+	process.env.CLAUDE_HYDRA_REPO_DIR = targetDir;
+	console.log(`[claude-hydra] Using repository directory: ${targetDir}`);
+}
 
 // Detect mode: --dev flag or check if build directory exists
 const isDev = process.argv.includes('--dev') || !existsSync(join(__dirname, 'build'));
