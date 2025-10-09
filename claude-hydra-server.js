@@ -106,6 +106,33 @@ async function startServer() {
 			await openBrowser(url);
 		}
 
+		// Setup signal handlers for graceful shutdown
+		const shutdown = async (signal) => {
+			console.log(`\n[claude-hydra] Received ${signal}, shutting down gracefully...`);
+			try {
+				await server.close();
+				console.log('[claude-hydra] Server closed successfully');
+				process.exit(0);
+			} catch (err) {
+				console.error('[claude-hydra] Error during shutdown:', err);
+				process.exit(1);
+			}
+		};
+
+		process.on('SIGTERM', () => shutdown('SIGTERM'));
+		process.on('SIGINT', () => shutdown('SIGINT'));
+		process.on('SIGHUP', () => shutdown('SIGHUP'));
+
+		// Windows doesn't support POSIX signals well, so also handle uncaughtException
+		process.on('uncaughtException', (err) => {
+			if (err.code === 'ERR_IPC_CHANNEL_CLOSED' || err.code === 'EPIPE') {
+				console.log('[claude-hydra] Parent process disconnected, shutting down...');
+				shutdown('PARENT_DISCONNECT');
+			} else {
+				throw err;
+			}
+		});
+
 	} else {
 		// Production mode: Run build/index.js
 		console.log('Starting production server...');

@@ -77,7 +77,7 @@ When you believe a bug fix or feature implementation is complete, automatically 
    - Otherwise, read the current value and increment by 1
    - This updates the version indicator in the UI to verify HMR is working
 
-2. **Start the development Server with option "--headless" in Background if not running yet in background**
+2. **Start the development Server in Background if not running yet in background**
 
 3. **Ask the user:** "Is everything working correctly? (yes/no)"
 
