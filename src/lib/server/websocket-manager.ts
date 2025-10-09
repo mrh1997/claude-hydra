@@ -1,5 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { GitStatus, SessionInfo } from './session-manager';
+import { getSessionManager } from './session-manager-instance';
 
 // Map branchname to WebSocket connection
 const branchConnections = new Map<string, WebSocket>();
@@ -39,4 +40,27 @@ export function broadcastGitStatusToAll(sessions: Map<string, SessionInfo>, getG
 			console.error(`Failed to broadcast git status for session ${sessionId}:`, error);
 		}
 	}
+}
+
+export function sendReadyStateWithGitStatus(branchName: string): boolean {
+	// Send state update
+	const sent = sendStateUpdate(branchName, 'ready');
+
+	if (!sent) {
+		return false;
+	}
+
+	// Also send git branch status
+	const sessionManager = getSessionManager();
+	const sessionId = sessionManager.getSessionIdByBranch(branchName);
+	if (sessionId) {
+		try {
+			const gitStatus = sessionManager.getGitStatus(sessionId);
+			sendGitBranchStatus(branchName, gitStatus);
+		} catch (error) {
+			console.error(`Failed to get git status for branch ${branchName}:`, error);
+		}
+	}
+
+	return true;
 }

@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { sendStateUpdate, sendGitBranchStatus } from '$lib/server/websocket-manager';
-import { getSessionManager } from '$lib/server/session-manager-instance';
+import { sendStateUpdate, sendReadyStateWithGitStatus } from '$lib/server/websocket-manager';
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { branchname } = params;
@@ -13,24 +12,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	}
 
 	// Send state update to the WebSocket connection for this branch
-	const sent = sendStateUpdate(branchname, state);
+	let sent: boolean;
+	if (state === 'ready') {
+		// Use shared function that updates both state and git status
+		sent = sendReadyStateWithGitStatus(branchname);
+	} else {
+		// For 'running' state, just send state update
+		sent = sendStateUpdate(branchname, state);
+	}
 
 	if (!sent) {
 		return json({ error: 'No active session for this branch' }, { status: 404 });
-	}
-
-	// If state is "ready", also send git branch status
-	if (state === 'ready') {
-		const sessionManager = getSessionManager();
-		const sessionId = sessionManager.getSessionIdByBranch(branchname);
-		if (sessionId) {
-			try {
-				const gitStatus = sessionManager.getGitStatus(sessionId);
-				sendGitBranchStatus(branchname, gitStatus);
-			} catch (error) {
-				console.error(`Failed to get git status for branch ${branchname}:`, error);
-			}
-		}
 	}
 
 	return json({ success: true });
