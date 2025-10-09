@@ -15,6 +15,7 @@
 	let portInUse = false;
 	let serverShutdown = false;
 	let reconnectTimeout: number | null = null;
+	let isHmrReloading = false;
 
 	// Check if we're in development mode
 	const isDev = import.meta.env.DEV;
@@ -96,10 +97,18 @@
 	onMount(() => {
 		establishManagementConnection();
 
+		// In development, detect Vite HMR full page reloads to suppress beforeunload dialog
+		if (isDev && import.meta.hot) {
+			import.meta.hot.on('vite:beforeFullReload', () => {
+				console.log('[page] Vite full page reload detected - suppressing beforeunload dialog');
+				isHmrReloading = true;
+			});
+		}
+
 		// Handle window/tab close
 		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-			// Allow closing without confirmation if server has shut down
-			if (serverShutdown) {
+			// Allow closing without confirmation if server has shut down or HMR is reloading
+			if (serverShutdown || isHmrReloading) {
 				return;
 			}
 
