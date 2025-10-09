@@ -2,19 +2,29 @@ import type { Handle } from '@sveltejs/kit';
 import { WebSocketServer } from 'ws';
 import { PtyManager } from '$lib/server/pty-manager';
 import { SessionManager } from '$lib/server/session-manager';
-import { registerConnection, unregisterConnection } from '$lib/server/websocket-manager';
+import { registerConnection, unregisterConnection, sendGitBranchStatus, broadcastGitStatusToAll } from '$lib/server/websocket-manager';
+import { setSessionManager } from '$lib/server/session-manager-instance';
 
 // Read ports from environment variables set by claude-hydra-server.js
 const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
 const MGMT_PORT = parseInt(process.env.MGMT_PORT || '3002', 10);
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3000', 10);
 
-let wss: WebSocketServer | null = null;
-let mgmtWss: WebSocketServer | null = null;
+// Use globalThis to persist WebSocket servers across HMR reloads
+declare global {
+	var __wss: WebSocketServer | null;
+	var __mgmtWss: WebSocketServer | null;
+	var __ptyManager: PtyManager | null;
+	var __hasManagementClient: boolean;
+	var __shutdownTimeout: NodeJS.Timeout | null;
+}
+
+let wss: WebSocketServer | null = globalThis.__wss || null;
+let mgmtWss: WebSocketServer | null = globalThis.__mgmtWss || null;
 let sessionManager: SessionManager;
 let ptyManager: PtyManager;
-let hasManagementClient = false;
-let shutdownTimeout: NodeJS.Timeout | null = null;
+let hasManagementClient = globalThis.__hasManagementClient || false;
+let shutdownTimeout: NodeJS.Timeout | null = globalThis.__shutdownTimeout || null;
 
 // Check if we're in development mode (set by claude-hydra-server.js)
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
@@ -22,6 +32,7 @@ const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('-
 // Initialize SessionManager - will throw if not in a git repository
 try {
 	sessionManager = new SessionManager();
+	setSessionManager(sessionManager); // Register the singleton instance
 	ptyManager = new PtyManager(sessionManager);
 } catch (error) {
 	console.error('Failed to initialize server:', error);
@@ -33,9 +44,13 @@ export { sessionManager };
 
 // Initialize WebSocket server
 function initWebSocketServer() {
-	if (wss) return;
+	if (wss) {
+		console.log('WebSocket server already running on port ' + WS_PORT);
+		return;
+	}
 
 	wss = new WebSocketServer({ port: WS_PORT });
+	globalThis.__wss = wss;
 
 	wss.on('connection', (ws) => {
 		console.log('WebSocket client connected');
@@ -133,13 +148,140 @@ function initWebSocketServer() {
 							setTimeout(() => {
 								const result = sessionManager.merge(mergeSessionId, data.commitMessage);
 
-								// If merge failed, we need to cleanup the merging flag
-								// (though the session is already destroyed, so this is just cleanup)
-
 								ws.send(JSON.stringify({ type: 'mergeResult', result }));
-								if (result.success && mergeSessionId === sessionId) {
-									// Clear sessionId only if we're merging this connection's session
-									sessionId = null;
+
+								// After successful merge, broadcast updated git status to all tabs
+								if (result.success) {
+									broadcastGitStatusToAll(
+										sessionManager.getAllSessions(),
+										(sid) => sessionManager.getGitStatus(sid)
+									);
+								}
+							}, 500);
+						}
+						break;
+
+					case 'commit':
+						// Commit changes in session
+						const commitSessionId = data.sessionId || sessionId;
+						if (commitSessionId) {
+							const commitResult = sessionManager.commit(commitSessionId, data.commitMessage);
+							ws.send(JSON.stringify({ type: 'commitResult', result: commitResult }));
+
+							// Send updated git status after commit
+							if (commitResult.success) {
+								try {
+									const gitStatus = sessionManager.getGitStatus(commitSessionId);
+									const targetBranch = ptyManager.getBranchName(commitSessionId);
+									if (targetBranch) {
+										sendGitBranchStatus(targetBranch, gitStatus);
+									}
+								} catch (error) {
+									console.error('Failed to send git status after commit:', error);
+								}
+							}
+						}
+						break;
+
+					case 'discardChanges':
+						// Discard uncommitted changes
+						const discardSessionId = data.sessionId || sessionId;
+						if (discardSessionId) {
+							const discardResult = sessionManager.discardChanges(discardSessionId);
+							ws.send(JSON.stringify({ type: 'discardResult', result: discardResult }));
+
+							// Send updated git status after discard
+							if (discardResult.success) {
+								try {
+									const gitStatus = sessionManager.getGitStatus(discardSessionId);
+									const targetBranch = ptyManager.getBranchName(discardSessionId);
+									if (targetBranch) {
+										sendGitBranchStatus(targetBranch, gitStatus);
+									}
+								} catch (error) {
+									console.error('Failed to send git status after discard:', error);
+								}
+							}
+						}
+						break;
+
+					case 'resetToBase':
+						// Reset branch to base
+						const resetSessionId = data.sessionId || sessionId;
+						if (resetSessionId) {
+							const resetResult = sessionManager.resetToBase(resetSessionId);
+							ws.send(JSON.stringify({ type: 'resetResult', result: resetResult }));
+
+							// Send updated git status after reset
+							if (resetResult.success) {
+								try {
+									const gitStatus = sessionManager.getGitStatus(resetSessionId);
+									const targetBranch = ptyManager.getBranchName(resetSessionId);
+									if (targetBranch) {
+										sendGitBranchStatus(targetBranch, gitStatus);
+									}
+								} catch (error) {
+									console.error('Failed to send git status after reset:', error);
+								}
+							}
+						}
+						break;
+
+					case 'rebase':
+						// Rebase branch onto base
+						const rebaseSessionId = data.sessionId || sessionId;
+						if (rebaseSessionId) {
+							const rebaseResult = sessionManager.rebase(rebaseSessionId);
+							ws.send(JSON.stringify({ type: 'rebaseResult', result: rebaseResult }));
+
+							// Send updated git status after rebase
+							try {
+								const gitStatus = sessionManager.getGitStatus(rebaseSessionId);
+								const targetBranch = ptyManager.getBranchName(rebaseSessionId);
+								if (targetBranch) {
+									sendGitBranchStatus(targetBranch, gitStatus);
+								}
+							} catch (error) {
+								console.error('Failed to send git status after rebase:', error);
+							}
+						}
+						break;
+
+					case 'restart':
+						// Restart Claude process for this session
+						const restartSessionId = data.sessionId || sessionId;
+						if (restartSessionId && branchName) {
+							// Destroy current PTY process (but keep worktree)
+							ptyManager.destroy(restartSessionId, true);
+
+							// Wait for process to fully exit
+							setTimeout(() => {
+								try {
+									// Create new PTY session with same branch (adoptExisting = true)
+									const baseUrl = `http://localhost:${HTTP_PORT}`;
+									const newSessionId = ptyManager.createSession(
+										branchName,
+										(sid, output) => {
+											if (ws.readyState === ws.OPEN) {
+												ws.send(JSON.stringify({ type: 'data', data: output }));
+											}
+										},
+										(sid) => {
+											if (ws.readyState === ws.OPEN) {
+												ws.send(JSON.stringify({ type: 'exit' }));
+											}
+										},
+										baseUrl,
+										true  // adoptExisting
+									);
+
+									// Update sessionId to new one
+									sessionId = newSessionId;
+									ws.send(JSON.stringify({ type: 'restarted', sessionId: newSessionId }));
+								} catch (error: any) {
+									const errorMessage = error.message || String(error);
+									console.error('Failed to restart session:', errorMessage);
+									ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
 								}
 							}, 500);
 						}
@@ -180,9 +322,13 @@ function initWebSocketServer() {
 
 // Initialize Management WebSocket server
 function initManagementWebSocketServer() {
-	if (mgmtWss) return;
+	if (mgmtWss) {
+		console.log('Management WebSocket server already running on port ' + MGMT_PORT);
+		return;
+	}
 
 	mgmtWss = new WebSocketServer({ port: MGMT_PORT });
+	globalThis.__mgmtWss = mgmtWss;
 
 	mgmtWss.on('connection', (ws) => {
 		// Only accept first client, reject all others
@@ -193,6 +339,7 @@ function initManagementWebSocketServer() {
 		}
 
 		hasManagementClient = true;
+		globalThis.__hasManagementClient = true;
 		console.log('Management client connected');
 
 		// Cancel any pending shutdown timeout since client (re)connected
@@ -204,6 +351,7 @@ function initManagementWebSocketServer() {
 
 		ws.on('close', () => {
 			hasManagementClient = false;
+			globalThis.__hasManagementClient = false;
 
 			if (isDev) {
 				// In development, wait 2 seconds before shutting down to handle HMR

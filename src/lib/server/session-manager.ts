@@ -239,6 +239,28 @@ export class SessionManager {
 	}
 
 	/**
+	 * Gets a session ID by branch name.
+	 * @param branchName - Branch name to look up
+	 * @returns Session ID if found, undefined otherwise
+	 */
+	getSessionIdByBranch(branchName: string): string | undefined {
+		for (const [sessionId, session] of this.sessions) {
+			if (session.branchName === branchName) {
+				return sessionId;
+			}
+		}
+		return undefined;
+	}
+
+	/**
+	 * Gets all active sessions.
+	 * @returns Map of session IDs to session info
+	 */
+	getAllSessions(): Map<string, SessionInfo> {
+		return new Map(this.sessions);
+	}
+
+	/**
 	 * Discovers existing claude-hydra worktrees from previous sessions.
 	 * @returns Array of worktrees in .claude-hydra/ that match the pattern
 	 */
@@ -361,7 +383,7 @@ export class SessionManager {
 	/**
 	 * Gets the git status for a session's worktree.
 	 * @param sessionId - Session identifier
-	 * @returns Status object with uncommitted changes and unmerged commits flags
+	 * @returns Status object with uncommitted changes, unmerged commits, and behind base flags
 	 */
 	getGitStatus(sessionId: string): GitStatus {
 		const session = this.sessions.get(sessionId);
@@ -386,13 +408,153 @@ export class SessionManager {
 			}).trim();
 			const hasUnmergedCommits = logOutput.length > 0;
 
+			// Check if branch is behind base (base has commits not in branch)
+			const behindOutput = execSync(`git rev-list --count HEAD..${this.baseBranch}`, {
+				cwd: session.worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+			const isBehindBase = parseInt(behindOutput) > 0;
+
 			return {
 				hasUncommittedChanges,
-				hasUnmergedCommits
+				hasUnmergedCommits,
+				isBehindBase
 			};
 		} catch (error: any) {
 			console.error(`Error getting git status for session ${sessionId}:`, error);
 			throw new Error(`Failed to get git status: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Commits all changes in a session's worktree.
+	 * @param sessionId - Session identifier
+	 * @param message - Commit message
+	 * @returns Success status and optional error message
+	 */
+	commit(sessionId: string, message: string): { success: boolean; error?: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// Stage all changes
+			execSync('git add -A', {
+				cwd: session.worktreePath,
+				stdio: 'pipe'
+			});
+
+			// Commit with message
+			execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, {
+				cwd: session.worktreePath,
+				stdio: 'pipe'
+			});
+
+			console.log(`Committed changes in session ${sessionId}: ${message}`);
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Commit failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
+	}
+
+	/**
+	 * Discards all uncommitted changes in a session's worktree.
+	 * @param sessionId - Session identifier
+	 * @returns Success status and optional error message
+	 */
+	discardChanges(sessionId: string): { success: boolean; error?: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// Reset to HEAD and clean untracked files
+			execSync('git reset --hard HEAD', {
+				cwd: session.worktreePath,
+				stdio: 'pipe'
+			});
+
+			execSync('git clean -fd', {
+				cwd: session.worktreePath,
+				stdio: 'pipe'
+			});
+
+			console.log(`Discarded changes in session ${sessionId}`);
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Discard changes failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
+	}
+
+	/**
+	 * Resets a session's branch to the base branch (undo unmerged commits).
+	 * @param sessionId - Session identifier
+	 * @returns Success status and optional error message
+	 */
+	resetToBase(sessionId: string): { success: boolean; error?: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// Reset to base branch
+			execSync(`git reset --hard ${this.baseBranch}`, {
+				cwd: session.worktreePath,
+				stdio: 'pipe'
+			});
+
+			console.log(`Reset session ${sessionId} to base branch ${this.baseBranch}`);
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Reset to base failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
+	}
+
+	/**
+	 * Rebases a session's branch onto the base branch.
+	 * @param sessionId - Session identifier
+	 * @returns Success status and optional error message
+	 */
+	rebase(sessionId: string): { success: boolean; error?: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// Rebase onto base branch
+			execSync(`git rebase ${this.baseBranch}`, {
+				cwd: session.worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			});
+
+			console.log(`Rebased session ${sessionId} onto ${this.baseBranch}`);
+			return { success: true };
+		} catch (error: any) {
+			// Rebase failed - abort it
+			try {
+				execSync('git rebase --abort', {
+					cwd: session.worktreePath,
+					stdio: 'pipe'
+				});
+			} catch (abortError) {
+				console.error(`Failed to abort rebase for session ${sessionId}:`, abortError);
+			}
+
+			const errorMessage = error.message || String(error);
+			console.error(`Rebase failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: 'Rebase failed. Please resolve conflicts manually.' };
 		}
 	}
 
@@ -471,14 +633,8 @@ export class SessionManager {
 
 			console.log(`Fast-forwarded ${this.baseBranch} to ${session.branchName}`);
 
-			// Clean up the session (worktree and branch)
-			try {
-				this.destroySession(sessionId);
-			} catch (cleanupError: any) {
-				const errorMessage = cleanupError.message || String(cleanupError);
-				console.error(`Cleanup failed for session ${sessionId}:`, errorMessage);
-				return { success: false, error: errorMessage };
-			}
+			// Keep the session alive - no cleanup needed
+			// Tab remains open and worktree/branch are preserved
 
 			return { success: true };
 		} catch (error: any) {
@@ -498,6 +654,7 @@ export interface SessionInfo {
 export interface GitStatus {
 	hasUncommittedChanges: boolean;
 	hasUnmergedCommits: boolean;
+	isBehindBase: boolean;
 }
 
 export interface MergeResult {

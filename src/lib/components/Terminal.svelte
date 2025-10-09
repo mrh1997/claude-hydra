@@ -161,6 +161,12 @@
 						}
 						break;
 
+					case 'gitBranchStatus':
+						if (sessionId) {
+							terminals.updateGitStatus(sessionId, message.gitStatus);
+						}
+						break;
+
 					case 'exit':
 						dispatch('exit', { terminalId });
 						break;

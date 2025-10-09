@@ -2,49 +2,34 @@
 	import { createEventDispatcher } from 'svelte';
 
 	export let show = false;
-	export let hasUncommittedChanges = false;
-	export let hasUnmergedCommits = false;
-	export let isExit = false;
+	export let title = 'Confirm';
+	export let message = '';
+	export let confirmText = 'Confirm';
+	export let cancelText = 'Cancel';
 
-	let primaryButton: HTMLButtonElement;
+	let confirmButton: HTMLButtonElement;
 	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
 
-	// Focus primary button when dialog is shown
+	// Focus confirm button when dialog is shown
 	$: if (show) {
-		setTimeout(() => primaryButton?.focus(), 0);
+		setTimeout(() => confirmButton?.focus(), 0);
 	}
 
-	function handleDiscard() {
-		dispatch('discard');
-	}
-
-	function handleRestart() {
-		dispatch('restart');
+	function handleConfirm() {
+		dispatch('confirm');
 	}
 
 	function handleCancel() {
 		dispatch('cancel');
 	}
 
-	// Computed dialog configuration
-	$: dialogMessage = hasUncommittedChanges && hasUnmergedCommits
-		? "This terminal has uncommitted changes and commits that haven't been merged."
-		: hasUncommittedChanges
-		? "This terminal has uncommitted changes."
-		: "This terminal has commits that haven't been merged.";
-
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
-			if (!isExit) {
-				handleCancel();
-			}
+			handleCancel();
 		} else if (event.key === 'Enter') {
-			if (isExit) {
-				handleRestart();
-			} else {
-				handleDiscard();
-			}
+			event.preventDefault();
+			handleConfirm();
 		}
 	}
 
@@ -78,18 +63,13 @@
 </script>
 
 {#if show}
-	<div class="overlay" on:click={isExit ? null : handleCancel} on:keydown={handleKeydown} role="presentation">
-		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" aria-modal="true">
-			<h2>{isExit ? 'Exit Terminal' : 'Close Terminal'}</h2>
-			<p>{dialogMessage}</p>
+	<div class="overlay" on:click={handleCancel} on:keydown={handleKeydown} role="presentation">
+		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" tabindex="-1" aria-modal="true">
+			<h2>{title}</h2>
+			<p>{message}</p>
 			<div class="buttons">
-				{#if isExit}
-					<button class="warning" on:click={handleDiscard}>Discard Changes</button>
-					<button bind:this={primaryButton} class="primary" on:click={handleRestart}>Restart Claude</button>
-				{:else}
-					<button class="cancel" on:click={handleCancel}>Cancel</button>
-					<button bind:this={primaryButton} class="warning" on:click={handleDiscard}>Discard Everything</button>
-				{/if}
+				<button class="cancel" on:click={handleCancel}>{cancelText}</button>
+				<button bind:this={confirmButton} class="warning" on:click={handleConfirm}>{confirmText}</button>
 			</div>
 		</div>
 	</div>
@@ -153,15 +133,6 @@
 
 	.cancel:hover {
 		background-color: #4e4e4e;
-	}
-
-	.primary {
-		background-color: #007acc;
-		color: #ffffff;
-	}
-
-	.primary:hover {
-		background-color: #005a9e;
 	}
 
 	.warning {
