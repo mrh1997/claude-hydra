@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } fr
 import { join } from 'path';
 import type { SessionManager } from '$lib/server/session-manager';
 import updateStateTemplate from '../../template/update-state.js?raw';
+import { sendStateUpdate } from './websocket-manager';
 
 export interface TerminalSession {
 	id: string;
@@ -218,6 +219,11 @@ export class PtyManager {
 	write(sessionId: string, data: string): void {
 		const session = this.sessions.get(sessionId);
 		if (session) {
+			// Detect ESC key (ASCII 27 / \x1b) and mark terminal as ready
+			if (data.includes('\x1b')) {
+				sendStateUpdate(session.branchName, 'ready');
+			}
+
 			session.ptyProcess.write(data);
 		}
 	}
