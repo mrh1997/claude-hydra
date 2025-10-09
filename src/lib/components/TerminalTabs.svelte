@@ -422,14 +422,14 @@
 					{#if tab.gitStatus}
 						<div class="badges">
 							{#if tab.gitStatus.hasUncommittedChanges}
-								<div class="badge commit-badge">
-									<span class="badge-text" on:click={(e) => handleCommitBadgeClick(tab, e)}>Commit</span>
+								<div class="badge commit-badge" title="The working directory contains modified files that are not committed yet. Click to commit them.">
+									<span class="badge-text" on:click={(e) => handleCommitBadgeClick(tab, e)}>Modified</span>
 									<button class="badge-x" on:click={(e) => handleDiscardClick(tab, e)}>×</button>
 								</div>
 							{/if}
 							{#if tab.gitStatus.hasUnmergedCommits && !tab.gitStatus.isBehindBase}
-								<div class="badge merge-badge">
-									<span class="badge-text" on:click={(e) => handleMergeBadgeClick(tab, e)}>Merge</span>
+								<div class="badge merge-badge" title="The branch contains pending commits that are not merged yet. Click to merge them.">
+									<span class="badge-text" on:click={(e) => handleMergeBadgeClick(tab, e)}>Unmerged</span>
 									<button class="badge-x" on:click={(e) => handleResetToBaseClick(tab, e)}>×</button>
 								</div>
 							{/if}
