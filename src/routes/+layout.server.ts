@@ -1,21 +1,26 @@
 import { dev } from '$app/environment';
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 export async function load() {
 	let version = '';
 
 	if (dev) {
 		try {
-			const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
+			// Get the source directory (claude-hydra repo root)
+			// This file is at src/routes/+layout.server.ts, so go up 2 levels
+			const __filename = fileURLToPath(import.meta.url);
+			const __dirname = dirname(__filename);
+			const sourceDir = join(__dirname, '..', '..');
 
-			// Get first 4 characters of git hash
-			const gitHash = execSync('git rev-parse HEAD', { cwd: repoDir, encoding: 'utf8' }).trim().substring(0, 4);
+			// Get first 4 characters of git hash from source repo
+			const gitHash = execSync('git rev-parse HEAD', { cwd: sourceDir, encoding: 'utf8' }).trim().substring(0, 4);
 			version = gitHash;
 
-			// Check if MODVERSION file exists
-			const modVersionPath = join(repoDir, 'MODVERSION');
+			// Check if MODVERSION file exists in source repo
+			const modVersionPath = join(sourceDir, 'MODVERSION');
 			if (existsSync(modVersionPath)) {
 				const modVersion = readFileSync(modVersionPath, 'utf8').trim();
 				if (modVersion) {
