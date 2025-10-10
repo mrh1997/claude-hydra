@@ -1,8 +1,9 @@
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, rmSync } from 'fs';
-import { join, basename } from 'path';
+import { existsSync, mkdirSync, rmSync, readFileSync, copyFileSync, readdirSync, statSync } from 'fs';
+import { join, basename, dirname, relative } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
+import { glob } from 'glob';
 
 /**
  * Synchronous sleep function that works cross-platform without shell commands.
@@ -72,7 +73,7 @@ export class SessionManager {
 	 * @param adoptExisting - If true, adopt an existing worktree instead of creating a new one
 	 * @returns Session information including the worktree path to use as cwd
 	 */
-	createSession(sessionId: string, branchName: string, adoptExisting: boolean = false): SessionInfo {
+	async createSession(sessionId: string, branchName: string, adoptExisting: boolean = false): Promise<SessionInfo> {
 		const worktreePath = join(this.baseDir, branchName);
 
 		// If adopting existing worktree
@@ -127,6 +128,9 @@ export class SessionManager {
 
 			this.sessions.set(sessionId, sessionInfo);
 			console.log(`Created session ${sessionId}: branch=${branchName}, path=${worktreePath}`);
+
+			// Sync local files to worktree
+			await this.syncLocalFilesToWorktree(worktreePath);
 
 			return sessionInfo;
 		} catch (error: any) {
@@ -340,6 +344,103 @@ export class SessionManager {
 			});
 			console.log(`  Found: ${worktree.branch} at ${worktree.path}`);
 		}
+	}
+
+	/**
+	 * Reads the .claude-hydra.localfiles file and returns list of glob patterns.
+	 * Each line in the file is a glob pattern for files to sync.
+	 * Always includes **\/CLAUDE.local.md pattern.
+	 * @param fromPath - Optional path to read config from (defaults to repo root)
+	 */
+	private readLocalFilesConfig(fromPath?: string): string[] {
+		const patterns: string[] = ['**/CLAUDE.local.md']; // Always include CLAUDE.local.md files
+
+		const basePath = fromPath || this.repoRoot;
+		const configPath = join(basePath, '.claude-hydra.localfiles');
+		if (!existsSync(configPath)) {
+			return patterns;
+		}
+
+		try {
+			const content = readFileSync(configPath, 'utf-8');
+			const configPatterns = content
+				.split('\n')
+				.map(line => line.trim())
+				.filter(line => line && !line.startsWith('#')); // Filter empty lines and comments
+
+			patterns.push(...configPatterns);
+		} catch (error) {
+			console.error('Failed to read .claude-hydra.localfiles:', error);
+		}
+
+		return patterns;
+	}
+
+	/**
+	 * Copies files matching patterns from source to destination.
+	 * @param patterns - Glob patterns to match
+	 * @param fromDir - Source directory
+	 * @param toDir - Destination directory
+	 */
+	private async copyLocalFiles(patterns: string[], fromDir: string, toDir: string): Promise<void> {
+		for (const pattern of patterns) {
+			try {
+				// Use glob to find matching files
+				const matches = await glob(pattern, {
+					cwd: fromDir,
+					dot: true,
+					nodir: false
+				});
+
+				for (const match of matches) {
+					const sourcePath = join(fromDir, match);
+					const destPath = join(toDir, match);
+
+					// Skip if source doesn't exist
+					if (!existsSync(sourcePath)) continue;
+
+					// Create destination directory if needed
+					const destDir = dirname(destPath);
+					if (!existsSync(destDir)) {
+						mkdirSync(destDir, { recursive: true });
+					}
+
+					// Copy file
+					try {
+						copyFileSync(sourcePath, destPath);
+						console.log(`  Copied: ${match}`);
+					} catch (copyError) {
+						console.error(`  Failed to copy ${match}:`, copyError);
+					}
+				}
+			} catch (error) {
+				console.error(`  Failed to process pattern '${pattern}':`, error);
+			}
+		}
+	}
+
+	/**
+	 * Syncs local files from main repo to worktree (on branch creation/rebase).
+	 */
+	private async syncLocalFilesToWorktree(worktreePath: string): Promise<void> {
+		const patterns = this.readLocalFilesConfig();
+		if (patterns.length === 0) return;
+
+		console.log(`Syncing local files to worktree...`);
+		await this.copyLocalFiles(patterns, this.repoRoot, worktreePath);
+	}
+
+	/**
+	 * Syncs local files from worktree back to main repo (on merge).
+	 * Uses the .claude-hydra.localfiles from the worktree, not the main repo.
+	 */
+	private async syncLocalFilesFromWorktree(worktreePath: string): Promise<void> {
+		// Read config from worktree, not main repo
+		const patterns = this.readLocalFilesConfig(worktreePath);
+		if (patterns.length === 0) return;
+
+		console.log(`Syncing local files from worktree back to main repo...`);
+		await this.copyLocalFiles(patterns, worktreePath, this.repoRoot);
 	}
 
 	private ensureValidBaseBranch(): void {
@@ -592,7 +693,7 @@ export class SessionManager {
 	 * @param sessionId - Session identifier
 	 * @returns Success status and optional error message
 	 */
-	rebase(sessionId: string): { success: boolean; error?: string } {
+	async rebase(sessionId: string): Promise<{ success: boolean; error?: string }> {
 		const session = this.sessions.get(sessionId);
 		if (!session) {
 			return { success: false, error: `Session ${sessionId} not found` };
@@ -607,6 +708,10 @@ export class SessionManager {
 			});
 
 			console.log(`Rebased session ${sessionId} onto ${this.baseBranch}`);
+
+			// Sync local files to worktree after rebase
+			await this.syncLocalFilesToWorktree(session.worktreePath);
+
 			return { success: true };
 		} catch (error: any) {
 			// Rebase failed - abort it
@@ -631,7 +736,7 @@ export class SessionManager {
 	 * @param commitMessage - Optional commit message. If provided, uncommitted changes will be committed first.
 	 * @returns Merge result with success status and optional error message
 	 */
-	merge(sessionId: string, commitMessage?: string): MergeResult {
+	async merge(sessionId: string, commitMessage?: string): Promise<MergeResult> {
 		const session = this.sessions.get(sessionId);
 		if (!session) {
 			return { success: false, error: `Session ${sessionId} not found` };
@@ -669,6 +774,9 @@ export class SessionManager {
 				});
 
 				console.log(`Rebased session ${sessionId} (${session.branchName}) onto ${this.baseBranch}`);
+
+				// Sync local files to worktree after rebase
+				await this.syncLocalFilesToWorktree(session.worktreePath);
 			} catch (rebaseError: any) {
 				// Rebase failed - abort it
 				try {
@@ -699,6 +807,9 @@ export class SessionManager {
 			});
 
 			console.log(`Fast-forwarded ${this.baseBranch} to ${session.branchName}`);
+
+			// Sync local files from worktree back to main repo
+			await this.syncLocalFilesFromWorktree(session.worktreePath);
 
 			// Keep the session alive - no cleanup needed
 			// Tab remains open and worktree/branch are preserved

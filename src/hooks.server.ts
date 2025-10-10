@@ -57,7 +57,7 @@ function initWebSocketServer() {
 		let sessionId: string | null = null;
 		let branchName: string | null = null;
 
-		ws.on('message', (message) => {
+		ws.on('message', async (message) => {
 			try {
 				const data = JSON.parse(message.toString());
 
@@ -76,7 +76,7 @@ function initWebSocketServer() {
 						// Determine base URL for hooks to call back using actual HTTP port
 						const baseUrl = `http://localhost:${HTTP_PORT}`;
 
-						sessionId = ptyManager.createSession(
+						sessionId = await ptyManager.createSession(
 							data.branchName,
 							(sid, output) => {
 								// Send terminal output to client
@@ -151,7 +151,7 @@ function initWebSocketServer() {
 						// Accept sessionId from message payload or use connection's sessionId
 						const mergeSessionId = data.sessionId || sessionId;
 						if (mergeSessionId) {
-							const result = sessionManager.merge(mergeSessionId, data.commitMessage);
+							const result = await sessionManager.merge(mergeSessionId, data.commitMessage);
 
 							ws.send(JSON.stringify({ type: 'mergeResult', result }));
 
@@ -235,7 +235,7 @@ function initWebSocketServer() {
 						// Rebase branch onto base
 						const rebaseSessionId = data.sessionId || sessionId;
 						if (rebaseSessionId) {
-							const rebaseResult = sessionManager.rebase(rebaseSessionId);
+							const rebaseResult = await sessionManager.rebase(rebaseSessionId);
 							ws.send(JSON.stringify({ type: 'rebaseResult', result: rebaseResult }));
 
 							// Send updated git status after rebase
@@ -259,11 +259,11 @@ function initWebSocketServer() {
 							ptyManager.destroy(restartSessionId, true);
 
 							// Wait for process to fully exit
-							setTimeout(() => {
+							setTimeout(async () => {
 								try {
 									// Create new PTY session with same branch (adoptExisting = true)
 									const baseUrl = `http://localhost:${HTTP_PORT}`;
-									const newSessionId = ptyManager.createSession(
+									const newSessionId = await ptyManager.createSession(
 										branchName,
 										(sid, output) => {
 											if (ws.readyState === ws.OPEN) {

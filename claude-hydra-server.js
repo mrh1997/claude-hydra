@@ -82,22 +82,22 @@ async function startServer() {
 		// Not in a git repository or git not available - will use auto-detection
 	}
 
-	// Check for CLAUDE-HYDRA-PORT file if we're in a git repository
+	// Check for .claude-hydra.port file if we're in a git repository
 	if (repoRoot) {
 		const fixedPort = readPortFromFile(repoRoot);
 		if (fixedPort !== null) {
-			// CLAUDE-HYDRA-PORT file exists - validate and use it
+			// .claude-hydra.port file exists - validate and use it
 			httpPort = fixedPort;
 			wsPort = fixedPort + 1;
 			mgmtPort = fixedPort + 2;
-			portSource = 'CLAUDE-HYDRA-PORT';
+			portSource = '.claude-hydra.port';
 
 			// Default to headless mode when using fixed port
 			if (!process.argv.includes('--headless') && !process.argv.includes('-hl')) {
 				isHeadless = true;
 			}
 
-			console.log(`[claude-hydra] Found CLAUDE-HYDRA-PORT file, using fixed ports...`);
+			console.log(`[claude-hydra] Found .claude-hydra.port file, using fixed ports...`);
 
 			// Validate port availability
 			const [httpAvailable, wsAvailable, mgmtAvailable] = await Promise.all([
@@ -108,8 +108,8 @@ async function startServer() {
 
 			if (!httpAvailable || !wsAvailable || !mgmtAvailable) {
 				const busyPort = !httpAvailable ? httpPort : (!wsAvailable ? wsPort : mgmtPort);
-				console.error(`Error: Port ${busyPort} from CLAUDE-HYDRA-PORT is already in use.`);
-				console.error('Please free the port or update the CLAUDE-HYDRA-PORT file.');
+				console.error(`Error: Port ${busyPort} from .claude-hydra.port is already in use.`);
+				console.error('Please free the port or update the .claude-hydra.port file.');
 				process.exit(1);
 			}
 		}

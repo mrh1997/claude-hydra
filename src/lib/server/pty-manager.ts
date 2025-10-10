@@ -141,7 +141,7 @@ export class PtyManager {
 		const entriesToAdd = [
 			'.claude/settings.local.json',
 			'.claude/hooks/update-state.js',
-			'CLAUDE-HYDRA-PORT'
+			'.claude-hydra.port'
 		];
 
 		try {
@@ -168,8 +168,8 @@ export class PtyManager {
 
 		// Define script priorities based on platform
 		const scriptNames = isWindows
-			? ['claude-hydra-autoinit.ps1', 'claude-hydra-autoinit.cmd', 'claude-hydra-autoinit.sh']
-			: ['claude-hydra-autoinit.sh'];
+			? ['.claude-hydra.autoinit.ps1', '.claude-hydra.autoinit.cmd', '.claude-hydra.autoinit.sh']
+			: ['.claude-hydra.autoinit.sh'];
 
 		// Find first existing script
 		let scriptPath: string | null = null;
@@ -239,11 +239,11 @@ export class PtyManager {
 		return this.sessions.get(sessionId)?.branchName;
 	}
 
-	createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false): string {
+	async createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false): Promise<string> {
 		const sessionId = uuidv4();
 
 		// Create isolated git worktree session
-		const sessionInfo = this.sessionManager.createSession(sessionId, branchName, adoptExisting);
+		const sessionInfo = await this.sessionManager.createSession(sessionId, branchName, adoptExisting);
 
 		// Setup Claude hooks
 		this.setupClaudeHooks(sessionInfo.worktreePath, branchName);

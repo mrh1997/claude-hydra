@@ -4,18 +4,14 @@ A web-based terminal interface for running Claude Code in your browser with full
 
 ## Features
 
-- 🖥️ Run Claude Code in your browser
-- 📑 Multiple terminal tabs/sessions
-- 📋 Copy/paste support (Ctrl+Shift+C / Ctrl+Shift+V)
-- ⌨️ Full keyboard shortcut forwarding
-- 🪟 Windows compatible (uses ConPTY)
-- 🎨 VS Code-like dark theme
+- Convieniently run multiple Claude Code parallel
+- Tight git worktree integration
+- Cross-platform
 
 ## Prerequisites
 
 - Node.js 18+
 - Claude Code CLI installed and available in PATH
-- Windows 10+ (for Windows ConPTY support)
 
 ## Installation
 
@@ -104,6 +100,73 @@ claude-hydra/
 ├── svelte.config.js
 ├── vite.config.ts
 └── tsconfig.json
+```
+
+## Configuration Files
+
+Claude Hydra supports several optional configuration files in your repository root to customize its behavior:
+
+### .claude-hydra.port
+
+Specifies a fixed port number for the Claude Hydra server. When this file exists, the server will:
+- Use the specified port for HTTP (default: auto-detect starting from 3000)
+- Use port+1 for WebSocket communication
+- Use port+2 for management connections
+- Run in headless mode (no browser auto-opens)
+
+**Format:** Single integer on the first line (e.g., `5000`)
+
+**Example:**
+```bash
+echo "5000" > .claude-hydra.port
+```
+
+### .claude-hydra.autoinit.{cmd,sh,ps1}
+
+Auto-initialization script that runs when creating a new worktree. The server will look for and execute (in order of priority):
+- Windows: `.claude-hydra.autoinit.ps1`, `.claude-hydra.autoinit.cmd`, `.claude-hydra.autoinit.sh`
+- Unix: `.claude-hydra.autoinit.sh`
+
+Use this to set up the environment in each new worktree (e.g., install dependencies, configure settings).
+
+**Example (.claude-hydra.autoinit.cmd):**
+```cmd
+@echo off
+echo Setting up new worktree...
+npm install
+```
+
+**Example (.claude-hydra.autoinit.sh):**
+```bash
+#!/bin/bash
+echo "Setting up new worktree..."
+npm install
+```
+
+### .claude-hydra.localfiles
+
+Defines files that should be automatically synchronized between the main repository and worktrees. Each line is a glob pattern. Files matching these patterns are:
+- Copied from main repo to worktree when creating a branch or rebasing
+- Copied from worktree back to main repo when merging
+
+Use this for files that shouldn't be committed but need to be shared across branches (e.g., local configuration, environment files).
+
+**Note:** All `**/CLAUDE.local.md` files are automatically synced regardless of this configuration file.
+
+**Format:** One glob pattern per line. Lines starting with `#` are comments.
+
+**Example:**
+```
+# Sync environment files
+.env.local
+.env.development
+
+# Sync IDE settings
+.vscode/*.json
+.idea/*.xml
+
+# Sync local configuration
+config/local.json
 ```
 
 ## Troubleshooting

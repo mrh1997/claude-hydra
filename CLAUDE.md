@@ -72,11 +72,11 @@ Server to Client:
 
 When you believe a bug fix or feature implementation is complete, automatically follow this workflow:
 
-1. **Increment MODVERSION before testing:**
-   - If MODVERSION file doesn't exist, create it with content "1"
+1. **Increment .claude-hydra.devversion before testing:**
+   - If .claude-hydra.devversion file doesn't exist, create it with content "1"
    - Otherwise, read the current value and increment by 1
    - This updates the version indicator in the UI to verify HMR is working
-   - MODVERSION must always be updates at last (after all other changes) 
+   - .claude-hydra.devversion must always be updated at last (after all other changes)
      as it causes the server to restart
 
 2. **Start the development Server in Background if not running yet in background**
@@ -84,7 +84,7 @@ When you believe a bug fix or feature implementation is complete, automatically 
 3. **Ask the user:** "Is everything working correctly? (yes/no)"
 
 4. **If the user responds "yes":**
-   - Reset MODVERSION to "1" (overwrite the file with just "1")
+   - Reset .claude-hydra.devversion to "1" (overwrite the file with just "1")
    - Explicitly `git add` each source file that was created or modified during this session (track these files throughout the conversation)
    - If any build artifacts were created, add them to .gitignore instead of committing them
    - Create a commit with a descriptive message based on the changes made
@@ -97,5 +97,5 @@ When you believe a bug fix or feature implementation is complete, automatically 
 
 5. **If the user responds "no" or provides instructions:**
    - Follow the user's instructions to fix the issues
-   - Go back to step 1 (increment MODVERSION again before testing)
+   - Go back to step 1 (increment .claude-hydra.devversion again before testing)
    - Do NOT commit anything until the user confirms everything works

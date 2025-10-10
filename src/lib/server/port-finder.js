@@ -24,13 +24,13 @@ export async function isPortAvailable(port) {
 }
 
 /**
- * Reads the CLAUDE-HYDRA-PORT file from the repository root if it exists
+ * Reads the .claude-hydra.port file from the repository root if it exists
  * @param repoRoot - The git repository root directory
  * @returns The port number from the file, or null if file doesn't exist or is invalid
  */
 export function readPortFromFile(repoRoot) {
 	try {
-		const portFilePath = join(repoRoot, 'CLAUDE-HYDRA-PORT');
+		const portFilePath = join(repoRoot, '.claude-hydra.port');
 		if (!existsSync(portFilePath)) {
 			return null;
 		}

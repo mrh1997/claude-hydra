@@ -11,5 +11,5 @@ vite.config.ts.timestamp-*
 nul
 /.idea
 .claude/settings.local.json
-MODVERSION
+.claude-hydra.devversion
 CLAUDE.local.md

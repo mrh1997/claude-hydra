@@ -19,12 +19,12 @@ export async function load() {
 			const gitHash = execSync('git rev-parse HEAD', { cwd: sourceDir, encoding: 'utf8' }).trim().substring(0, 4);
 			version = gitHash;
 
-			// Check if MODVERSION file exists in source repo
-			const modVersionPath = join(sourceDir, 'MODVERSION');
-			if (existsSync(modVersionPath)) {
-				const modVersion = readFileSync(modVersionPath, 'utf8').trim();
-				if (modVersion) {
-					version += `-${modVersion}`;
+			// Check if .claude-hydra.devversion file exists in source repo
+			const devVersionPath = join(sourceDir, '.claude-hydra.devversion');
+			if (existsSync(devVersionPath)) {
+				const devVersion = readFileSync(devVersionPath, 'utf8').trim();
+				if (devVersion) {
+					version += `-${devVersion}`;
 				}
 			}
 		} catch (error) {
