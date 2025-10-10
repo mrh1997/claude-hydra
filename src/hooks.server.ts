@@ -97,6 +97,17 @@ function initWebSocketServer() {
 						// Register this connection with the branch name
 						registerConnection(branchName, ws);
 
+						// When adopting existing worktree, send initial git status immediately
+						// (connection must be registered first for the message to be sent)
+						if (adoptExisting) {
+							try {
+								const gitStatus = sessionManager.getGitStatus(sessionId);
+								sendGitBranchStatus(branchName, gitStatus);
+							} catch (error) {
+								console.error(`Failed to send initial git status for ${branchName}:`, error);
+							}
+						}
+
 						ws.send(JSON.stringify({ type: 'created', sessionId, branchName }));
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
