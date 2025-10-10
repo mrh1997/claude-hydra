@@ -299,8 +299,9 @@ export class PtyManager {
 	write(sessionId: string, data: string): void {
 		const session = this.sessions.get(sessionId);
 		if (session) {
-			// Detect ESC key (ASCII 27 / \x1b) and mark terminal as ready with git status update
-			if (data.includes('\x1b')) {
+			// Detect bare ESC key press (not escape sequences like \x1b[O)
+			// Bare ESC = exactly '\x1b', not followed by control sequence characters
+			if (data === '\x1b') {
 				sendReadyStateWithGitStatus(session.branchName);
 			}
 

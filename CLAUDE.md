@@ -76,6 +76,8 @@ When you believe a bug fix or feature implementation is complete, automatically 
    - If MODVERSION file doesn't exist, create it with content "1"
    - Otherwise, read the current value and increment by 1
    - This updates the version indicator in the UI to verify HMR is working
+   - MODVERSION must always be updates at last (after all other changes) 
+     as it causes the server to restart
 
 2. **Start the development Server in Background if not running yet in background**
 
