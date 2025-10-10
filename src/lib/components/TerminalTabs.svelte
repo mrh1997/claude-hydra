@@ -28,6 +28,7 @@
 	let showDiscardConfirmDialog = false;
 	let dialogError = '';
 	let closeError = '';
+	let successMessage = '';
 	let pendingCloseTabId: string | null = null;
 	let pendingDiscardTab: any = null;
 	let isDiscardingCommits = false;
@@ -214,6 +215,9 @@
 			if (!result.success) {
 				closeError = result.error || 'Commit failed';
 				setTimeout(() => closeError = '', 5000);
+			} else {
+				successMessage = 'Changes committed successfully';
+				setTimeout(() => successMessage = '', 4000);
 			}
 		} catch (error: any) {
 			closeError = error.message || 'Commit failed';
@@ -268,7 +272,14 @@
 		if (!tab.sessionId) return;
 
 		// Directly merge (without committing uncommitted changes)
-		await performMerge(tab.sessionId);
+		const result = await performMerge(tab.sessionId);
+		if (result.success) {
+			successMessage = 'Branch merged successfully';
+			setTimeout(() => successMessage = '', 4000);
+		} else {
+			closeError = result.error || 'Merge failed';
+			setTimeout(() => closeError = '', 5000);
+		}
 	}
 
 	async function handleResetToBaseClick(tab: any, event: MouseEvent) {
@@ -297,6 +308,9 @@
 			if (!result.success) {
 				closeError = result.error || 'Rebase failed';
 				setTimeout(() => closeError = '', 5000);
+			} else {
+				successMessage = 'Branch rebased successfully';
+				setTimeout(() => successMessage = '', 4000);
 			}
 		} catch (error: any) {
 			closeError = error.message || 'Rebase failed';
@@ -434,6 +448,9 @@
 	{/if}
 	{#if closeError}
 		<div class="error-banner">{closeError}</div>
+	{/if}
+	{#if successMessage}
+		<div class="success-banner">{successMessage}</div>
 	{/if}
 </div>
 
@@ -668,6 +685,19 @@
 		background-color: #5a1d1d;
 		border-bottom: 1px solid #be1100;
 		color: #f48771;
+		padding: 8px 16px;
+		font-size: 13px;
+		z-index: 999;
+	}
+
+	.success-banner {
+		position: absolute;
+		top: 0;
+		left: min(270px, 30vw);
+		right: 0;
+		background-color: #1d5a1d;
+		border-bottom: 1px solid #00be11;
+		color: #71f487;
 		padding: 8px 16px;
 		font-size: 13px;
 		z-index: 999;
