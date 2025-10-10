@@ -82,6 +82,11 @@
 
 		// Handle copy/paste keyboard shortcuts
 		terminal.attachCustomKeyEventHandler((event) => {
+			// F9: Switch to next ready terminal (handled by window event handler)
+			if (event.key === 'F9' && event.type === 'keydown') {
+				return false; // Prevent terminal from handling it, let it bubble to window
+			}
+
 			// Ctrl+Shift+C: Copy
 			if (event.ctrlKey && event.shiftKey && event.key === 'C' && event.type === 'keydown') {
 				const selection = terminal.getSelection();

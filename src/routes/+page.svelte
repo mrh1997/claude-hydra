@@ -105,6 +105,29 @@
 			});
 		}
 
+		// Handle F9 key to switch to next ready terminal
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'F9') {
+				event.preventDefault();
+
+				const currentIndex = $terminals.findIndex(t => t.active);
+				if (currentIndex === -1 || $terminals.length === 0) return;
+
+				// Search for next ready tab, starting from the one below current
+				// If none found below, wrap around and search from top to current
+				const searchOrder = [
+					...$terminals.slice(currentIndex + 1),
+					...$terminals.slice(0, currentIndex + 1)
+				];
+
+				const nextReadyTab = searchOrder.find(tab => tab.state === 'ready');
+
+				if (nextReadyTab) {
+					terminals.setActiveTab(nextReadyTab.id);
+				}
+			}
+		};
+
 		// Handle window/tab close
 		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
 			// Allow closing without confirmation if server has shut down or HMR is reloading
@@ -128,10 +151,12 @@
 			}
 		};
 
+		window.addEventListener('keydown', handleKeyDown);
 		window.addEventListener('beforeunload', handleBeforeUnload);
 
 		// Cleanup
 		return () => {
+			window.removeEventListener('keydown', handleKeyDown);
 			window.removeEventListener('beforeunload', handleBeforeUnload);
 			if (managementWs) {
 				managementWs.close();
