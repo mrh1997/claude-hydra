@@ -13,7 +13,8 @@ if (!state || !['ready', 'running'].includes(state)) {
 // Get git branch name
 let branchName;
 try {
-  branchName = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || '.';
+  branchName = execSync(`git -C "${projectDir}" rev-parse --abbrev-ref HEAD`, { encoding: 'utf-8' }).trim();
 } catch (error) {
   process.exit(1);
 }

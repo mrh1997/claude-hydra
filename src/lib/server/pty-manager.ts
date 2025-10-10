@@ -85,13 +85,19 @@ export class PtyManager {
 			settings.hooks = {};
 		}
 
+		// Build hook command with absolute path to the script
+		// Use forward slashes for cross-platform compatibility (Node.js handles them on Windows too)
+		const hookScriptAbsPath = hookScriptPath.replace(/\\/g, '/');
+		const runningCommand = `node "${hookScriptAbsPath}" running`;
+		const readyCommand = `node "${hookScriptAbsPath}" ready`;
+
 		// Use new hooks format with matchers
 		// UserPromptSubmit fires when user submits a prompt = Claude STARTS processing = running
 		settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit || [];
 		settings.hooks.UserPromptSubmit.push({
 			hooks: [{
 				type: 'command',
-				command: 'node .claude/hooks/update-state.js running'
+				command: runningCommand
 			}]
 		});
 
@@ -100,7 +106,7 @@ export class PtyManager {
 		settings.hooks.PreToolUse.push({
 			hooks: [{
 				type: 'command',
-				command: 'node .claude/hooks/update-state.js running'
+				command: runningCommand
 			}]
 		});
 
@@ -109,7 +115,7 @@ export class PtyManager {
 		settings.hooks.Stop.push({
 			hooks: [{
 				type: 'command',
-				command: 'node .claude/hooks/update-state.js ready'
+				command: readyCommand
 			}]
 		});
 
@@ -118,7 +124,7 @@ export class PtyManager {
 		settings.hooks.Notification.push({
 			hooks: [{
 				type: 'command',
-				command: 'node .claude/hooks/update-state.js ready'
+				command: readyCommand
 			}]
 		});
 
