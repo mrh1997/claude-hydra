@@ -5,9 +5,9 @@ export default defineConfig({
 	plugins: [
 		sveltekit(),
 		{
-			name: 'reload-on-modversion-change',
+			name: 'reload-on-devversion-change',
 			handleHotUpdate({ file, server }) {
-				if (file.endsWith('MODVERSION')) {
+				if (file.endsWith('.claude-hydra.devversion')) {
 					server.ws.send({ type: 'full-reload' });
 					return [];
 				}

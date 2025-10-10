@@ -59,8 +59,8 @@
 				portInUse = true;
 			} else if (!portInUse) {
 				if (isDev) {
-					// In development, wait 2 seconds before shutting down to handle HMR
-					console.log('[page] Management connection closed - waiting 2s before shutdown (HMR tolerance)');
+					// In development, wait 5 seconds before shutting down to handle HMR
+					console.log('[page] Management connection closed - waiting 5s before shutdown (HMR tolerance)');
 
 					// Clear any existing reconnect timeout
 					if (reconnectTimeout) {
@@ -82,7 +82,7 @@
 								console.log('[page] Reconnection successful - server still running');
 							}
 						}, 1000);
-					}, 2000);
+					}, 5000);
 				} else {
 					// Production: immediate shutdown
 					console.log('Management connection closed - server shut down');

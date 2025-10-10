@@ -159,6 +159,9 @@
 						);
 						gitBackends.register(sessionId, gitBackend);
 
+						// Request initial git status (especially important for adopted sessions)
+						ws.send(JSON.stringify({ type: 'getGitStatus', sessionId }));
+
 						// Immediately send the actual terminal size to the PTY
 						if (terminal && fitAddon) {
 							const dims = fitAddon.proposeDimensions();

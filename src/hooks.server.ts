@@ -136,8 +136,12 @@ function initWebSocketServer() {
 						const statusSessionId = data.sessionId || sessionId;
 						if (statusSessionId) {
 							try {
-								const status = sessionManager.getGitStatus(statusSessionId);
-								ws.send(JSON.stringify({ type: 'gitStatus', status }));
+								const gitStatus = sessionManager.getGitStatus(statusSessionId);
+								const targetBranch = ptyManager.getBranchName(statusSessionId);
+								if (targetBranch) {
+									// Use broadcast mechanism to send git status
+									sendGitBranchStatus(targetBranch, gitStatus);
+								}
 							} catch (error: any) {
 								const errorMessage = error.message || String(error);
 								console.error('Failed to get git status:', errorMessage);
@@ -358,12 +362,12 @@ function initManagementWebSocketServer() {
 			globalThis.__hasManagementClient = false;
 
 			if (isDev) {
-				// In development, wait 2 seconds before shutting down to handle HMR
-				console.log('Management client disconnected - waiting 2s before shutdown (HMR tolerance)');
+				// In development, wait 5 seconds before shutting down to handle HMR
+				console.log('Management client disconnected - waiting 5s before shutdown (HMR tolerance)');
 				shutdownTimeout = setTimeout(() => {
-					console.log('No reconnection within 2s - shutting down server');
+					console.log('No reconnection within 5s - shutting down server');
 					process.exit(0);
-				}, 2000);
+				}, 5000);
 			} else {
 				// In production, shut down immediately
 				console.log('Management client disconnected - shutting down server');

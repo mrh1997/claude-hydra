@@ -2,8 +2,14 @@ import type { WebSocket } from 'ws';
 import type { GitStatus, SessionInfo } from './session-manager';
 import { getSessionManager } from './session-manager-instance';
 
+// Persist branchConnections across HMR reloads
+declare global {
+	var __branchConnections: Map<string, WebSocket> | null;
+}
+
 // Map branchname to WebSocket connection
-const branchConnections = new Map<string, WebSocket>();
+const branchConnections = globalThis.__branchConnections || new Map<string, WebSocket>();
+globalThis.__branchConnections = branchConnections;
 
 export function registerConnection(branchName: string, ws: WebSocket) {
 	branchConnections.set(branchName, ws);
