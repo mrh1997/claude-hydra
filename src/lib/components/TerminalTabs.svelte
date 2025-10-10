@@ -408,15 +408,15 @@
 									<button class="badge-x" on:click={(e) => handleDiscardClick(tab, e)}>×</button>
 								</div>
 							{/if}
-							{#if tab.gitStatus.hasUnmergedCommits && !tab.gitStatus.isBehindBase}
+							{#if tab.gitStatus.hasUnmergedCommits}
 								<div class="badge merge-badge" title="The branch contains pending commits that are not merged yet. Click to merge them.">
 									<span class="badge-text" on:click={(e) => handleMergeBadgeClick(tab, e)}>Unmerged</span>
 									<button class="badge-x" on:click={(e) => handleResetToBaseClick(tab, e)}>×</button>
 								</div>
 							{/if}
 							{#if tab.gitStatus.isBehindBase}
-								<div class="badge rebase-badge" on:click={(e) => handleRebaseBadgeClick(tab, e)}>
-									<span class="badge-text">Rebase</span>
+								<div class="badge rebase-badge" on:click={(e) => handleRebaseBadgeClick(tab, e)} title="Current branch is behind the base branch. Click to rebase">
+									<span class="badge-text">Outdated</span>
 								</div>
 							{/if}
 						</div>
@@ -444,7 +444,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
-		width: min(200px, 30vw);
+		width: min(270px, 30vw);
 		overflow-y: auto;
 		overflow-x: hidden;
 	}
@@ -615,18 +615,19 @@
 	}
 
 	.commit-badge {
+		background-color: transparent;
+		border: 2px dotted #e5e510;
+		color: #e5e510;
+	}
+
+	.merge-badge {
 		background-color: #e5e510;
 		color: #1e1e1e;
 	}
 
-	.merge-badge {
-		background-color: #0dbc79;
-		color: #1e1e1e;
-	}
-
 	.rebase-badge {
-		background-color: #2472c8;
-		color: #ffffff;
+		background-color: #ff8c00;
+		color: #1e1e1e;
 	}
 
 	.new-tab-btn {
@@ -662,7 +663,7 @@
 	.error-banner {
 		position: absolute;
 		top: 0;
-		left: min(200px, 30vw);
+		left: min(270px, 30vw);
 		right: 0;
 		background-color: #5a1d1d;
 		border-bottom: 1px solid #be1100;
