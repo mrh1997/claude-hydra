@@ -54,9 +54,6 @@ export class GitBackend {
 
 			// Resolve with the appropriate data
 			switch (messageType) {
-				case 'gitStatus':
-					pending.resolve(message.status);
-					break;
 				case 'commitResult':
 				case 'discardResult':
 				case 'resetResult':
@@ -73,7 +70,7 @@ export class GitBackend {
 			return true; // Message was handled
 		}
 
-		// Handle gitBranchStatus updates (not request/response, just notifications)
+		// Handle gitBranchStatus updates (broadcast notifications)
 		if (messageType === 'gitBranchStatus') {
 			this.onGitStatusUpdate(message.gitStatus);
 			return true;
@@ -118,17 +115,6 @@ export class GitBackend {
 				...data
 			}));
 		});
-	}
-
-	/**
-	 * Get current git status
-	 */
-	async getGitStatus(): Promise<GitStatus> {
-		return this.sendRequest<GitStatus>(
-			'getGitStatus',
-			{},
-			'gitStatus'
-		);
 	}
 
 	/**

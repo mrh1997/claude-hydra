@@ -70,10 +70,10 @@
 		pendingCloseTabId = id;
 		isExitClose = isExit;
 
-		// Check git status before closing
-		const status = await getGitStatus(tab.sessionId);
+		// Use cached git status from tab store (no need to wait for backend)
+		const status = tab.gitStatus;
 		if (!status) {
-			// Error getting status, just close
+			// No status available yet, just close
 			terminals.removeTab(id);
 			pendingCloseTabId = null;
 			return;
@@ -98,20 +98,6 @@
 		await checkAndClose(id, false);
 	}
 
-	async function getGitStatus(sessionId: string): Promise<{ hasUncommittedChanges: boolean; hasUnmergedCommits: boolean } | null> {
-		const backend = getGitBackend(sessionId);
-		if (!backend) {
-			console.error('No GitBackend found for session', sessionId);
-			return null;
-		}
-
-		try {
-			return await backend.getGitStatus();
-		} catch (error) {
-			console.error('Failed to get git status:', error);
-			return null;
-		}
-	}
 
 	async function performMerge(sessionId: string, commitMessage?: string): Promise<{ success: boolean; error?: string }> {
 		const backend = getGitBackend(sessionId);
