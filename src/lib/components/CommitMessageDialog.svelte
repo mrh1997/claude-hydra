@@ -4,14 +4,14 @@
 	export let show = false;
 
 	let commitMessage = '';
-	let inputElement: HTMLInputElement;
+	let textareaElement: HTMLTextAreaElement;
 	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
 
 	// Clear input and focus when dialog is shown
 	$: if (show) {
 		commitMessage = '';
-		setTimeout(() => inputElement?.focus(), 0);
+		setTimeout(() => textareaElement?.focus(), 0);
 	}
 
 	function handleSubmit() {
@@ -28,7 +28,8 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
+		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+			event.preventDefault();
 			handleSubmit();
 		} else if (event.key === 'Escape') {
 			handleCancel();
@@ -68,15 +69,16 @@
 	<div class="overlay" on:click={handleCancel} role="presentation">
 		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" aria-modal="true">
 			<h2>Commit Message</h2>
-			<p>Enter a commit message for your changes:</p>
+			<p>Enter a commit message for your changes (Ctrl+Enter to submit):</p>
 
-			<input
-				type="text"
-				bind:this={inputElement}
+			<textarea
+				bind:this={textareaElement}
 				bind:value={commitMessage}
 				on:keydown={handleKeydown}
 				placeholder="e.g., Add new feature"
-			/>
+				rows="8"
+				cols="80"
+			></textarea>
 
 			<div class="buttons">
 				<button class="cancel" on:click={handleCancel}>Cancel</button>
@@ -105,7 +107,7 @@
 		border: 1px solid #3e3e3e;
 		border-radius: 4px;
 		padding: 24px;
-		min-width: 400px;
+		min-width: 700px;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 
@@ -122,7 +124,7 @@
 		color: #999999;
 	}
 
-	input {
+	textarea {
 		width: 100%;
 		padding: 8px 12px;
 		background-color: #1e1e1e;
@@ -132,9 +134,11 @@
 		font-size: 14px;
 		font-family: 'Consolas', monospace;
 		box-sizing: border-box;
+		resize: vertical;
+		min-height: 8em;
 	}
 
-	input:focus {
+	textarea:focus {
 		outline: none;
 		border-color: #007acc;
 	}
