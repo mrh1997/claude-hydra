@@ -29,6 +29,9 @@ let shutdownTimeout: NodeJS.Timeout | null = globalThis.__shutdownTimeout || nul
 // Check if we're in development mode (set by claude-hydra-server.js)
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
+// Check if we're in headless mode (set by claude-hydra-server.js)
+const isHeadless = process.env.IS_HEADLESS === 'true';
+
 // Initialize SessionManager - will throw if not in a git repository
 try {
 	sessionManager = new SessionManager();
@@ -367,7 +370,10 @@ function initManagementWebSocketServer() {
 			hasManagementClient = false;
 			globalThis.__hasManagementClient = false;
 
-			if (isDev) {
+			if (isHeadless) {
+				// In headless mode, allow sequential sessions - don't shutdown
+				console.log('Management client disconnected - allowing next connection (headless mode)');
+			} else if (isDev) {
 				// In development, wait 5 seconds before shutting down to handle HMR
 				console.log('Management client disconnected - waiting 5s before shutdown (HMR tolerance)');
 				shutdownTimeout = setTimeout(() => {

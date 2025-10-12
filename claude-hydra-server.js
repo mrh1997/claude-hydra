@@ -130,6 +130,7 @@ async function startServer() {
 	}
 
 	// Set environment variables for the server
+	process.env.IS_HEADLESS = String(isHeadless);
 	process.env.HTTP_PORT = String(httpPort);
 	process.env.WS_PORT = String(wsPort);
 	process.env.MGMT_PORT = String(mgmtPort);
