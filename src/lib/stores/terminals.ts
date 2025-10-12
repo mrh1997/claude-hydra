@@ -1,5 +1,11 @@
 import { writable } from 'svelte/store';
 
+export interface CommitInfo {
+	hash: string;
+	timestamp: number;
+	message: string;
+}
+
 export interface GitStatus {
 	hasUncommittedChanges: boolean;
 	hasUnmergedCommits: boolean;
@@ -15,6 +21,7 @@ export interface TerminalTab {
 	state: 'ready' | 'running';
 	adoptExisting: boolean;
 	gitStatus: GitStatus | null;
+	commitLog: CommitInfo[] | null;
 }
 
 function createTerminalsStore() {
@@ -27,7 +34,7 @@ function createTerminalsStore() {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
 				// Add new tab
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'ready', adoptExisting, gitStatus: null }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'ready', adoptExisting, gitStatus: null, commitLog: null }];
 			});
 		},
 		removeTab: (id: string) => {
@@ -80,6 +87,15 @@ function createTerminalsStore() {
 				const tab = tabs.find(tab => tab.sessionId === sessionId);
 				if (tab) {
 					tab.gitStatus = gitStatus;
+				}
+				return tabs;
+			});
+		},
+		updateCommitLog: (sessionId: string, commitLog: CommitInfo[]) => {
+			update(tabs => {
+				const tab = tabs.find(tab => tab.sessionId === sessionId);
+				if (tab) {
+					tab.commitLog = commitLog;
 				}
 				return tabs;
 			});

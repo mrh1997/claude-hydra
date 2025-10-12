@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { GitStatus, SessionInfo } from './session-manager';
+import type { GitStatus, SessionInfo, CommitInfo } from './session-manager';
 import { getSessionManager } from './session-manager-instance';
 
 // Persist branchConnections across HMR reloads
@@ -28,10 +28,14 @@ export function sendStateUpdate(branchName: string, state: 'ready' | 'running'):
 	return false;
 }
 
-export function sendGitBranchStatus(branchName: string, gitStatus: GitStatus): boolean {
+export function sendGitBranchStatus(branchName: string, gitStatus: GitStatus, commitLog?: CommitInfo[]): boolean {
 	const ws = branchConnections.get(branchName);
 	if (ws && ws.readyState === ws.OPEN) {
-		ws.send(JSON.stringify({ type: 'gitBranchStatus', gitStatus }));
+		const message: any = { type: 'gitBranchStatus', gitStatus };
+		if (commitLog !== undefined) {
+			message.commitLog = commitLog;
+		}
+		ws.send(JSON.stringify(message));
 		return true;
 	}
 	return false;
@@ -56,13 +60,14 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 		return false;
 	}
 
-	// Also send git branch status
+	// Also send git branch status with commit log
 	const sessionManager = getSessionManager();
 	const sessionId = sessionManager.getSessionIdByBranch(branchName);
 	if (sessionId) {
 		try {
 			const gitStatus = sessionManager.getGitStatus(sessionId);
-			sendGitBranchStatus(branchName, gitStatus);
+			const commitLog = sessionManager.getCommitLog(sessionId);
+			sendGitBranchStatus(branchName, gitStatus, commitLog);
 		} catch (error) {
 			console.error(`Failed to get git status for branch ${branchName}:`, error);
 		}

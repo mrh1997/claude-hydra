@@ -596,6 +596,48 @@ export class SessionManager {
 	}
 
 	/**
+	 * Gets the commit log for a session's branch (commits since base branch).
+	 * @param sessionId - Session identifier
+	 * @returns Array of commit info objects
+	 */
+	getCommitLog(sessionId: string): CommitInfo[] {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new Error(`Session ${sessionId} not found`);
+		}
+
+		try {
+			// Get commits from base branch to current branch
+			// Format: hash|timestamp|subject (first line of commit message)
+			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --format="%h|%at|%s"`, {
+				cwd: session.worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+
+			// Parse the output into CommitInfo objects
+			if (!logOutput) {
+				return [];
+			}
+
+			const commits = logOutput.split('\n').map(line => {
+				const [hash, timestampStr, ...messageParts] = line.split('|');
+				const message = messageParts.join('|'); // Rejoin in case message contains |
+				return {
+					hash: hash.substring(0, 4), // First 4 characters of hash
+					timestamp: parseInt(timestampStr, 10),
+					message
+				};
+			});
+
+			return commits;
+		} catch (error: any) {
+			console.error(`Error getting commit log for session ${sessionId}:`, error);
+			throw new Error(`Failed to get commit log: ${error.message}`);
+		}
+	}
+
+	/**
 	 * Commits all changes in a session's worktree.
 	 * @param sessionId - Session identifier
 	 * @param message - Commit message
@@ -827,6 +869,12 @@ export interface SessionInfo {
 	sessionId: string;
 	branchName: string;
 	worktreePath: string;
+}
+
+export interface CommitInfo {
+	hash: string;
+	timestamp: number;
+	message: string;
 }
 
 export interface GitStatus {

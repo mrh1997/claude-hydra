@@ -1,3 +1,9 @@
+export interface CommitInfo {
+	hash: string;
+	timestamp: number;
+	message: string;
+}
+
 export interface GitStatus {
 	hasUncommittedChanges: boolean;
 	hasUnmergedCommits: boolean;
@@ -27,13 +33,13 @@ type PendingRequest = {
 export class GitBackend {
 	private sessionId: string;
 	private ws: WebSocket;
-	private onGitStatusUpdate: (status: GitStatus) => void;
+	private onGitStatusUpdate: (status: GitStatus, commitLog?: CommitInfo[]) => void;
 	private pendingRequests = new Map<string, PendingRequest>();
 
 	constructor(
 		sessionId: string,
 		ws: WebSocket,
-		onGitStatusUpdate: (status: GitStatus) => void
+		onGitStatusUpdate: (status: GitStatus, commitLog?: CommitInfo[]) => void
 	) {
 		this.sessionId = sessionId;
 		this.ws = ws;
@@ -72,7 +78,7 @@ export class GitBackend {
 
 		// Handle gitBranchStatus updates (broadcast notifications)
 		if (messageType === 'gitBranchStatus') {
-			this.onGitStatusUpdate(message.gitStatus);
+			this.onGitStatusUpdate(message.gitStatus, message.commitLog);
 			return true;
 		}
 

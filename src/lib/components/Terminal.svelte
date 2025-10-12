@@ -3,6 +3,7 @@
 	import { terminals } from '$lib/stores/terminals';
 	import { GitBackend } from '$lib/GitBackend';
 	import { gitBackends } from '$lib/stores/gitBackends';
+	import CommitList from './CommitList.svelte';
 
 	export let terminalId: string;
 	export let active: boolean = false;
@@ -157,9 +158,12 @@
 						gitBackend = new GitBackend(
 							sessionId,
 							ws,
-							(gitStatus) => {
+							(gitStatus, commitLog) => {
 								// Callback when git status is updated
 								terminals.updateGitStatus(sessionId, gitStatus);
+								if (commitLog !== undefined) {
+									terminals.updateCommitLog(sessionId, commitLog);
+								}
 							}
 						);
 						gitBackends.register(sessionId, gitBackend);
@@ -236,10 +240,15 @@
 			fitAddon.fit();
 		}, 0);
 	}
+
+	// Get commit log from store for this terminal
+	$: tab = $terminals.find(t => t.id === terminalId);
+	$: commitLog = tab?.commitLog || null;
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
 	<div bind:this={terminalElement} class="terminal"></div>
+	<CommitList commits={commitLog} {active} />
 </div>
 
 <style>
@@ -250,7 +259,7 @@
 		width: 100%;
 		height: 100%;
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 	}
 
 	.terminal-container.hidden {
@@ -260,7 +269,6 @@
 
 	.terminal {
 		flex: 1;
-		width: 100%;
 		height: 100%;
 	}
 </style>

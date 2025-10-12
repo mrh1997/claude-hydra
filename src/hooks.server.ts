@@ -102,7 +102,8 @@ function initWebSocketServer() {
 						if (adoptExisting) {
 							try {
 								const gitStatus = sessionManager.getGitStatus(sessionId);
-								sendGitBranchStatus(branchName, gitStatus);
+								const commitLog = sessionManager.getCommitLog(sessionId);
+								sendGitBranchStatus(branchName, gitStatus, commitLog);
 							} catch (error) {
 								console.error(`Failed to send initial git status for ${branchName}:`, error);
 							}
@@ -137,10 +138,11 @@ function initWebSocketServer() {
 						if (statusSessionId) {
 							try {
 								const gitStatus = sessionManager.getGitStatus(statusSessionId);
+								const commitLog = sessionManager.getCommitLog(statusSessionId);
 								const targetBranch = ptyManager.getBranchName(statusSessionId);
 								if (targetBranch) {
-									// Use broadcast mechanism to send git status
-									sendGitBranchStatus(targetBranch, gitStatus);
+									// Use broadcast mechanism to send git status with commit log
+									sendGitBranchStatus(targetBranch, gitStatus, commitLog);
 								}
 							} catch (error: any) {
 								const errorMessage = error.message || String(error);
@@ -176,13 +178,14 @@ function initWebSocketServer() {
 							const commitResult = sessionManager.commit(commitSessionId, data.commitMessage);
 							ws.send(JSON.stringify({ type: 'commitResult', result: commitResult }));
 
-							// Send updated git status after commit
+							// Send updated git status with commit log after commit
 							if (commitResult.success) {
 								try {
 									const gitStatus = sessionManager.getGitStatus(commitSessionId);
+									const commitLog = sessionManager.getCommitLog(commitSessionId);
 									const targetBranch = ptyManager.getBranchName(commitSessionId);
 									if (targetBranch) {
-										sendGitBranchStatus(targetBranch, gitStatus);
+										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
 									}
 								} catch (error) {
 									console.error('Failed to send git status after commit:', error);
@@ -198,13 +201,14 @@ function initWebSocketServer() {
 							const discardResult = sessionManager.discardChanges(discardSessionId);
 							ws.send(JSON.stringify({ type: 'discardResult', result: discardResult }));
 
-							// Send updated git status after discard
+							// Send updated git status with commit log after discard
 							if (discardResult.success) {
 								try {
 									const gitStatus = sessionManager.getGitStatus(discardSessionId);
+									const commitLog = sessionManager.getCommitLog(discardSessionId);
 									const targetBranch = ptyManager.getBranchName(discardSessionId);
 									if (targetBranch) {
-										sendGitBranchStatus(targetBranch, gitStatus);
+										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
 									}
 								} catch (error) {
 									console.error('Failed to send git status after discard:', error);
@@ -220,13 +224,14 @@ function initWebSocketServer() {
 							const resetResult = sessionManager.resetToBase(resetSessionId);
 							ws.send(JSON.stringify({ type: 'resetResult', result: resetResult }));
 
-							// Send updated git status after reset
+							// Send updated git status with commit log after reset
 							if (resetResult.success) {
 								try {
 									const gitStatus = sessionManager.getGitStatus(resetSessionId);
+									const commitLog = sessionManager.getCommitLog(resetSessionId);
 									const targetBranch = ptyManager.getBranchName(resetSessionId);
 									if (targetBranch) {
-										sendGitBranchStatus(targetBranch, gitStatus);
+										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
 									}
 								} catch (error) {
 									console.error('Failed to send git status after reset:', error);
@@ -242,12 +247,13 @@ function initWebSocketServer() {
 							const rebaseResult = await sessionManager.rebase(rebaseSessionId);
 							ws.send(JSON.stringify({ type: 'rebaseResult', result: rebaseResult }));
 
-							// Send updated git status after rebase
+							// Send updated git status with commit log after rebase
 							try {
 								const gitStatus = sessionManager.getGitStatus(rebaseSessionId);
+								const commitLog = sessionManager.getCommitLog(rebaseSessionId);
 								const targetBranch = ptyManager.getBranchName(rebaseSessionId);
 								if (targetBranch) {
-									sendGitBranchStatus(targetBranch, gitStatus);
+									sendGitBranchStatus(targetBranch, gitStatus, commitLog);
 								}
 							} catch (error) {
 								console.error('Failed to send git status after rebase:', error);
