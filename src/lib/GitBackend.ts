@@ -20,6 +20,13 @@ export interface OperationResult {
 	error?: string;
 }
 
+export type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged';
+
+export interface FileInfo {
+	path: string;
+	status: FileStatus;
+}
+
 type PendingRequest = {
 	resolve: (value: any) => void;
 	reject: (error: Error) => void;
@@ -34,6 +41,7 @@ export class GitBackend {
 	private sessionId: string;
 	private ws: WebSocket;
 	private onGitStatusUpdate: (status: GitStatus, commitLog?: CommitInfo[]) => void;
+	private onFileListUpdate: ((files: FileInfo[], commitId: string | null) => void) | null = null;
 	private pendingRequests = new Map<string, PendingRequest>();
 
 	constructor(
@@ -44,6 +52,13 @@ export class GitBackend {
 		this.sessionId = sessionId;
 		this.ws = ws;
 		this.onGitStatusUpdate = onGitStatusUpdate;
+	}
+
+	/**
+	 * Set callback for file list updates
+	 */
+	setFileListCallback(callback: (files: FileInfo[], commitId: string | null) => void) {
+		this.onFileListUpdate = callback;
 	}
 
 	/**
@@ -68,7 +83,7 @@ export class GitBackend {
 					pending.resolve(message.result);
 					break;
 				case 'restarted':
-					pending.resolve();
+					pending.resolve(undefined);
 					break;
 				default:
 					pending.resolve(message);
@@ -79,6 +94,16 @@ export class GitBackend {
 		// Handle gitBranchStatus updates (broadcast notifications)
 		if (messageType === 'gitBranchStatus') {
 			this.onGitStatusUpdate(message.gitStatus, message.commitLog);
+			// Also request file list for working tree when git status updates
+			this.requestFileList(null);
+			return true;
+		}
+
+		// Handle fileList updates
+		if (messageType === 'fileList') {
+			if (this.onFileListUpdate) {
+				this.onFileListUpdate(message.files, message.commitId);
+			}
 			return true;
 		}
 
@@ -190,6 +215,23 @@ export class GitBackend {
 			'restarted',
 			10000 // Longer timeout for restart
 		);
+	}
+
+	/**
+	 * Request file list for a specific commit or working tree
+	 * @param commitId - Commit hash (or null for working tree)
+	 */
+	requestFileList(commitId: string | null): void {
+		if (this.ws.readyState !== WebSocket.OPEN) {
+			console.warn('WebSocket not open, cannot request file list');
+			return;
+		}
+
+		this.ws.send(JSON.stringify({
+			type: 'requestFileList',
+			sessionId: this.sessionId,
+			commitId
+		}));
 	}
 
 	/**

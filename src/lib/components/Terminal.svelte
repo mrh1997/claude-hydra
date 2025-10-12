@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy, createEventDispatcher, getContext } from 'svelte';
 	import { terminals } from '$lib/stores/terminals';
-	import { GitBackend } from '$lib/GitBackend';
+	import { GitBackend, type FileInfo } from '$lib/GitBackend';
 	import { gitBackends } from '$lib/stores/gitBackends';
 	import CommitList from './CommitList.svelte';
 
@@ -19,6 +19,7 @@
 	let ws: WebSocket;
 	let sessionId: string | null = null;
 	let gitBackend: GitBackend | null = null;
+	let files: FileInfo[] | null = null;
 
 	onMount(async () => {
 		// Dynamic imports to avoid SSR issues
@@ -166,6 +167,10 @@
 								}
 							}
 						);
+						gitBackend.setFileListCallback((fileList, commitId) => {
+							// Callback when file list is updated
+							files = fileList;
+						});
 						gitBackends.register(sessionId, gitBackend);
 
 						// Request initial git status (especially important for adopted sessions)
@@ -244,11 +249,17 @@
 	// Get commit log from store for this terminal
 	$: tab = $terminals.find(t => t.id === terminalId);
 	$: commitLog = tab?.commitLog || null;
+
+	function handleCommitSelect(commitId: string | null) {
+		if (gitBackend) {
+			gitBackend.requestFileList(commitId);
+		}
+	}
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
 	<div bind:this={terminalElement} class="terminal"></div>
-	<CommitList commits={commitLog} {active} />
+	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} />
 </div>
 
 <style>

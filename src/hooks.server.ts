@@ -98,7 +98,8 @@ function initWebSocketServer() {
 						);
 
 						// Register this connection with the branch name
-						registerConnection(branchName, ws);
+						// At this point branchName is guaranteed to be non-null
+						registerConnection(branchName!, ws);
 
 						// When adopting existing worktree, send initial git status immediately
 						// (connection must be registered first for the message to be sent)
@@ -106,7 +107,7 @@ function initWebSocketServer() {
 							try {
 								const gitStatus = sessionManager.getGitStatus(sessionId);
 								const commitLog = sessionManager.getCommitLog(sessionId);
-								sendGitBranchStatus(branchName, gitStatus, commitLog);
+								sendGitBranchStatus(branchName!, gitStatus, commitLog);
 							} catch (error) {
 								console.error(`Failed to send initial git status for ${branchName}:`, error);
 							}
@@ -285,6 +286,9 @@ function initWebSocketServer() {
 						// Restart Claude process for this session
 						const restartSessionId = data.sessionId || sessionId;
 						if (restartSessionId && branchName) {
+							// Capture branchName for closure
+							const capturedBranchName = branchName;
+
 							// Destroy current PTY process (but keep worktree)
 							ptyManager.destroy(restartSessionId, true);
 
@@ -294,7 +298,7 @@ function initWebSocketServer() {
 									// Create new PTY session with same branch (adoptExisting = true)
 									const baseUrl = `http://localhost:${HTTP_PORT}`;
 									const newSessionId = await ptyManager.createSession(
-										branchName,
+										capturedBranchName,
 										(sid, output) => {
 											if (ws.readyState === ws.OPEN) {
 												ws.send(JSON.stringify({ type: 'data', data: output }));
@@ -318,6 +322,26 @@ function initWebSocketServer() {
 									ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
 								}
 							}, 500);
+						}
+						break;
+
+					case 'requestFileList':
+						// Get file list for a commit or working tree
+						const fileListSessionId = data.sessionId || sessionId;
+						if (fileListSessionId) {
+							try {
+								const commitId = data.commitId || null; // null means working tree
+								const fileList = sessionManager.getFileList(fileListSessionId, commitId);
+								ws.send(JSON.stringify({
+									type: 'fileList',
+									commitId,
+									files: fileList
+								}));
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to get file list:', errorMessage);
+								ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
+							}
 						}
 						break;
 

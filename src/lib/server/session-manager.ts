@@ -667,6 +667,161 @@ export class SessionManager {
 	}
 
 	/**
+	 * Gets the file list for a session's worktree.
+	 * @param sessionId - Session identifier
+	 * @param commitId - Commit hash (or null for working tree)
+	 * @returns Array of file info objects with path and status
+	 */
+	getFileList(sessionId: string, commitId: string | null): FileInfo[] {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new Error(`Session ${sessionId} not found`);
+		}
+
+		try {
+			if (commitId === null) {
+				// Get working tree status
+				return this.getWorkingTreeFileList(session);
+			} else {
+				// Get file list for specific commit
+				return this.getCommitFileList(session, commitId);
+			}
+		} catch (error: any) {
+			console.error(`Error getting file list for session ${sessionId}:`, error);
+			throw new Error(`Failed to get file list: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Gets file list for working tree with status information.
+	 */
+	private getWorkingTreeFileList(session: SessionInfo): FileInfo[] {
+		// Get status of modified/added/deleted files
+		const statusOutput = execSync('git status --porcelain', {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		}).trim();
+
+		// Get all tracked files
+		const trackedOutput = execSync('git ls-files', {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		}).trim();
+
+		// Parse status into a map
+		const statusMap = new Map<string, FileStatus>();
+		if (statusOutput) {
+			for (const line of statusOutput.split('\n')) {
+				// Format: XY PATH or XY PATH -> ORIGPATH (for renames)
+				const xy = line.substring(0, 2);
+				const path = line.substring(3).split(' -> ')[0].trim();
+
+				const x = xy[0]; // Index status
+				const y = xy[1]; // Working tree status
+
+				// Determine file status based on git status codes
+				let status: FileStatus = 'unchanged';
+				if (x === '?' || y === '?') {
+					status = 'untracked';
+				} else if (x === 'A' || y === 'A') {
+					status = 'added';
+				} else if (x === 'D' || y === 'D') {
+					status = 'deleted';
+				} else if (x === 'M' || y === 'M' || x === 'R' || y === 'R') {
+					status = 'modified';
+				}
+
+				statusMap.set(path, status);
+			}
+		}
+
+		// Build file list with all tracked files
+		const files: FileInfo[] = [];
+		if (trackedOutput) {
+			for (const path of trackedOutput.split('\n')) {
+				files.push({
+					path,
+					status: statusMap.get(path) || 'unchanged'
+				});
+			}
+		}
+
+		// Add untracked files
+		for (const [path, status] of statusMap) {
+			if (status === 'untracked') {
+				files.push({ path, status });
+			}
+		}
+
+		return files;
+	}
+
+	/**
+	 * Gets file list for a specific commit.
+	 */
+	private getCommitFileList(session: SessionInfo, commitId: string): FileInfo[] {
+		// Get all files in the commit
+		const allFilesOutput = execSync(`git ls-tree -r --name-only "${commitId}"`, {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		}).trim();
+
+		// Get files that were modified in this commit (compared to parent)
+		// Use diff-tree to show changes in this commit
+		const diffOutput = execSync(`git diff-tree --no-commit-id --name-status -r "${commitId}"`, {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		}).trim();
+
+		// Parse diff output into a map of file -> status
+		const changedFiles = new Map<string, FileStatus>();
+		if (diffOutput) {
+			for (const line of diffOutput.split('\n')) {
+				const parts = line.split('\t');
+				if (parts.length >= 2) {
+					const statusCode = parts[0];
+					const filePath = parts[1];
+
+					// Map git status codes to our FileStatus
+					let status: FileStatus = 'unchanged';
+					if (statusCode === 'A') {
+						status = 'added';
+					} else if (statusCode === 'M') {
+						status = 'modified';
+					} else if (statusCode === 'D') {
+						status = 'deleted';
+					}
+
+					changedFiles.set(filePath, status);
+				}
+			}
+		}
+
+		if (!allFilesOutput) {
+			return [];
+		}
+
+		// Build file list: all files from commit with their status
+		const files: FileInfo[] = allFilesOutput.split('\n').map(path => ({
+			path,
+			status: changedFiles.get(path) || 'unchanged'
+		}));
+
+		// Add deleted files (they won't be in ls-tree output)
+		for (const [path, status] of changedFiles) {
+			if (status === 'deleted') {
+				files.push({ path, status });
+			}
+		}
+
+		return files;
+	}
+
+	/**
 	 * Commits all changes in a session's worktree.
 	 * @param sessionId - Session identifier
 	 * @param message - Commit message
@@ -1131,4 +1286,11 @@ export interface MergeResult {
 	success: boolean;
 	error?: string;
 	conflictsResolved?: boolean;
+}
+
+export type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged';
+
+export interface FileInfo {
+	path: string;
+	status: FileStatus;
 }
