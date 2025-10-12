@@ -66,7 +66,16 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 	if (sessionId) {
 		try {
 			const gitStatus = sessionManager.getGitStatus(sessionId);
-			const commitLog = sessionManager.getCommitLog(sessionId);
+
+			// Try to get commit log, but don't fail if it's unavailable
+			let commitLog: CommitInfo[] | undefined = undefined;
+			try {
+				commitLog = sessionManager.getCommitLog(sessionId);
+			} catch (commitLogError) {
+				console.error(`Failed to get commit log for branch ${branchName}:`, commitLogError);
+				// Continue anyway - we can still send the git status without commit log
+			}
+
 			sendGitBranchStatus(branchName, gitStatus, commitLog);
 		} catch (error) {
 			console.error(`Failed to get git status for branch ${branchName}:`, error);
