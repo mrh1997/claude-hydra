@@ -760,17 +760,112 @@ export class SessionManager {
 	}
 
 	/**
+	 * Resolves rebase conflicts using Claude CLI.
+	 * @param worktreePath - Path to the worktree with conflicts
+	 * @returns True if conflicts were resolved, false otherwise
+	 */
+	private async resolveRebaseConflictsWithClaude(worktreePath: string): Promise<boolean> {
+		try {
+			console.log('[CONFLICT-RESOLUTION] Starting conflict resolution check...');
+			console.log(`[CONFLICT-RESOLUTION] Worktree path: ${worktreePath}`);
+
+			// Check if we're in a conflict state
+			console.log('[CONFLICT-RESOLUTION] Running git status to check for conflicts...');
+			const statusOutput = execSync('git status --porcelain', {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			});
+			console.log(`[CONFLICT-RESOLUTION] Git status output:\n${statusOutput}`);
+
+			// Look for conflict markers (UU = both modified, AA = both added, etc.)
+			const hasConflicts = statusOutput.split('\n').some(line =>
+				line.startsWith('UU ') || line.startsWith('AA ') || line.startsWith('DD ')
+			);
+
+			if (!hasConflicts) {
+				console.log('[CONFLICT-RESOLUTION] No conflicts detected, skipping Claude resolution');
+				return false;
+			}
+
+			console.log('[CONFLICT-RESOLUTION] Conflicts detected, preparing to call Claude CLI...');
+			console.log(`[CONFLICT-RESOLUTION] Resolving rebase conflicts with Claude CLI in ${worktreePath}`);
+
+			// Spawn Claude CLI with non-interactive prompt
+			const prompt = 'You are an expert at resolving git rebase conflicts. Read all commit messages using git log and read all diffs to understand the intention of each commit before you start merging. Then resolve all conflicts in the working directory. When you are finished resolving conflicts, quit.';
+			const command = `claude --dangerously-skip-permissions -p "${prompt.replace(/"/g, '\\"')}"`;
+
+			console.log('[CONFLICT-RESOLUTION] About to execute Claude CLI...');
+			console.log(`[CONFLICT-RESOLUTION] Command: ${command}`);
+			console.log('[CONFLICT-RESOLUTION] Waiting for Claude to complete (max 2 minutes)...');
+
+			const startTime = Date.now();
+			execSync(command, {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: 'inherit', // Show Claude's output in server logs
+				timeout: 120000 // 2 minutes timeout
+			});
+			const duration = Date.now() - startTime;
+
+			console.log(`[CONFLICT-RESOLUTION] Claude CLI completed in ${duration}ms`);
+			console.log('[CONFLICT-RESOLUTION] Checking rebase status...');
+
+			// Check if rebase is still in progress
+			const rebaseInProgress = existsSync(join(worktreePath, '.git', 'rebase-merge')) ||
+			                         existsSync(join(worktreePath, '.git', 'rebase-apply'));
+
+			if (!rebaseInProgress) {
+				console.log('[CONFLICT-RESOLUTION] Claude CLI completed the rebase automatically');
+				return true; // Rebase was completed by Claude
+			}
+
+			console.log('[CONFLICT-RESOLUTION] Rebase still in progress, verifying conflicts are resolved...');
+
+			// Verify conflicts are resolved
+			const postStatusOutput = execSync('git status --porcelain', {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			});
+			console.log(`[CONFLICT-RESOLUTION] Post-resolution git status:\n${postStatusOutput}`);
+
+			const stillHasConflicts = postStatusOutput.split('\n').some(line =>
+				line.startsWith('UU ') || line.startsWith('AA ') || line.startsWith('DD ')
+			);
+
+			if (stillHasConflicts) {
+				console.error('[CONFLICT-RESOLUTION] ERROR: Claude failed to resolve all conflicts');
+				return false;
+			}
+
+			console.log('[CONFLICT-RESOLUTION] SUCCESS: Claude successfully resolved rebase conflicts');
+			return true;
+		} catch (error: any) {
+			console.error(`[CONFLICT-RESOLUTION] ERROR: Exception during Claude conflict resolution:`, error);
+			console.error(`[CONFLICT-RESOLUTION] Error message: ${error.message}`);
+			console.error(`[CONFLICT-RESOLUTION] Error stack: ${error.stack}`);
+			return false;
+		}
+	}
+
+	/**
 	 * Rebases a session's branch onto the base branch.
 	 * @param sessionId - Session identifier
 	 * @returns Success status and optional error message
 	 */
-	async rebase(sessionId: string): Promise<{ success: boolean; error?: string }> {
+	async rebase(sessionId: string): Promise<{ success: boolean; error?: string; conflictsResolved?: boolean }> {
+		console.log(`[REBASE] Starting rebase for session ${sessionId}`);
 		const session = this.sessions.get(sessionId);
 		if (!session) {
+			console.error(`[REBASE] Session ${sessionId} not found`);
 			return { success: false, error: `Session ${sessionId} not found` };
 		}
 
+		console.log(`[REBASE] Session found: ${session.branchName} at ${session.worktreePath}`);
+
 		try {
+			console.log(`[REBASE] Attempting to rebase ${session.branchName} onto ${this.baseBranch}...`);
 			// Rebase onto base branch
 			execSync(`git rebase ${this.baseBranch}`, {
 				cwd: session.worktreePath,
@@ -778,26 +873,88 @@ export class SessionManager {
 				stdio: 'pipe'
 			});
 
-			console.log(`Rebased session ${sessionId} onto ${this.baseBranch}`);
+			console.log(`[REBASE] SUCCESS: Rebased session ${sessionId} onto ${this.baseBranch} without conflicts`);
 
 			// Sync local files to worktree after rebase
+			console.log(`[REBASE] Syncing local files to worktree...`);
 			await this.syncLocalFilesToWorktree(session.worktreePath);
 
+			console.log(`[REBASE] Rebase completed successfully`);
 			return { success: true };
 		} catch (error: any) {
-			// Rebase failed - abort it
+			// Rebase failed - check if it's due to conflicts
+			console.log(`[REBASE] Rebase failed for session ${sessionId}, attempting to resolve conflicts with Claude...`);
+
+			// Try to resolve conflicts with Claude
+			const conflictsResolved = await this.resolveRebaseConflictsWithClaude(session.worktreePath);
+
+			if (conflictsResolved) {
+				console.log(`[REBASE] Conflicts resolved, checking if rebase needs continuation...`);
+
+				// Check if rebase is still in progress (Claude may have completed it)
+				const rebaseInProgress = existsSync(join(session.worktreePath, '.git', 'rebase-merge')) ||
+				                         existsSync(join(session.worktreePath, '.git', 'rebase-apply'));
+
+				if (!rebaseInProgress) {
+					console.log(`[REBASE] Claude CLI completed the rebase automatically`);
+
+					// Sync local files to worktree after rebase
+					console.log(`[REBASE] Syncing local files to worktree...`);
+					await this.syncLocalFilesToWorktree(session.worktreePath);
+
+					console.log(`[REBASE] Rebase with conflict resolution completed successfully`);
+					return { success: true, conflictsResolved: true };
+				}
+
+				// Continue the rebase
+				try {
+					console.log(`[REBASE] Continuing rebase...`);
+					execSync('git rebase --continue', {
+						cwd: session.worktreePath,
+						encoding: 'utf8',
+						stdio: 'pipe'
+					});
+
+					console.log(`[REBASE] SUCCESS: Rebased session ${sessionId} onto ${this.baseBranch} after resolving conflicts`);
+
+					// Sync local files to worktree after rebase
+					console.log(`[REBASE] Syncing local files to worktree...`);
+					await this.syncLocalFilesToWorktree(session.worktreePath);
+
+					console.log(`[REBASE] Rebase with conflict resolution completed successfully`);
+					return { success: true, conflictsResolved: true };
+				} catch (continueError: any) {
+					console.error(`[REBASE] ERROR: Failed to continue rebase after conflict resolution:`, continueError);
+					// Abort the rebase
+					try {
+						console.log(`[REBASE] Aborting rebase...`);
+						execSync('git rebase --abort', {
+							cwd: session.worktreePath,
+							stdio: 'pipe'
+						});
+						console.log(`[REBASE] Rebase aborted`);
+					} catch (abortError) {
+						console.error(`[REBASE] ERROR: Failed to abort rebase for session ${sessionId}:`, abortError);
+					}
+					return { success: false, error: 'Rebase continuation failed after conflict resolution.' };
+				}
+			}
+
+			// Claude couldn't resolve conflicts, abort the rebase
+			console.log(`[REBASE] Claude could not resolve conflicts, aborting rebase...`);
 			try {
 				execSync('git rebase --abort', {
 					cwd: session.worktreePath,
 					stdio: 'pipe'
 				});
+				console.log(`[REBASE] Rebase aborted`);
 			} catch (abortError) {
-				console.error(`Failed to abort rebase for session ${sessionId}:`, abortError);
+				console.error(`[REBASE] ERROR: Failed to abort rebase for session ${sessionId}:`, abortError);
 			}
 
 			const errorMessage = error.message || String(error);
-			console.error(`Rebase failed for session ${sessionId}:`, errorMessage);
-			return { success: false, error: 'Rebase failed. Please resolve conflicts manually.' };
+			console.error(`[REBASE] ERROR: Rebase failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: 'Rebase failed. Conflicts could not be resolved automatically.' };
 		}
 	}
 
@@ -837,6 +994,8 @@ export class SessionManager {
 			}
 
 			// Rebase the session branch onto the base branch
+			console.log(`[MERGE] Rebasing ${session.branchName} onto ${this.baseBranch} before merge...`);
+			let conflictsResolvedDuringRebase = false;
 			try {
 				execSync(`git rebase "${this.baseBranch}"`, {
 					cwd: session.worktreePath,
@@ -844,24 +1003,80 @@ export class SessionManager {
 					stdio: 'pipe'
 				});
 
-				console.log(`Rebased session ${sessionId} (${session.branchName}) onto ${this.baseBranch}`);
+				console.log(`[MERGE] Rebased session ${sessionId} (${session.branchName}) onto ${this.baseBranch} without conflicts`);
 
 				// Sync local files to worktree after rebase
+				console.log(`[MERGE] Syncing local files to worktree after rebase...`);
 				await this.syncLocalFilesToWorktree(session.worktreePath);
 			} catch (rebaseError: any) {
-				// Rebase failed - abort it
-				try {
-					execSync('git rebase --abort', {
-						cwd: session.worktreePath,
-						stdio: 'pipe'
-					});
-				} catch (abortError) {
-					console.error(`Failed to abort rebase for session ${sessionId}:`, abortError);
-				}
+				// Rebase failed - try to resolve conflicts with Claude
+				console.log(`[MERGE] Rebase failed for session ${sessionId} during merge, attempting to resolve conflicts with Claude...`);
 
-				const errorMessage = rebaseError.message || String(rebaseError);
-				console.error(`Rebase failed for session ${sessionId}:`, errorMessage);
-				return { success: false, error: `Rebase failed. Please resolve before closing tab` };
+				const conflictsResolved = await this.resolveRebaseConflictsWithClaude(session.worktreePath);
+
+				if (conflictsResolved) {
+					console.log(`[MERGE] Conflicts resolved, checking if rebase needs continuation...`);
+
+					// Check if rebase is still in progress (Claude may have completed it)
+					const rebaseInProgress = existsSync(join(session.worktreePath, '.git', 'rebase-merge')) ||
+					                         existsSync(join(session.worktreePath, '.git', 'rebase-apply'));
+
+					if (!rebaseInProgress) {
+						console.log(`[MERGE] Claude CLI completed the rebase automatically`);
+
+						// Sync local files to worktree after rebase
+						console.log(`[MERGE] Syncing local files to worktree...`);
+						await this.syncLocalFilesToWorktree(session.worktreePath);
+
+						conflictsResolvedDuringRebase = true;
+					} else {
+						// Continue the rebase
+						try {
+							console.log(`[MERGE] Continuing rebase...`);
+							execSync('git rebase --continue', {
+								cwd: session.worktreePath,
+								encoding: 'utf8',
+								stdio: 'pipe'
+							});
+
+							console.log(`[MERGE] Rebased session ${sessionId} (${session.branchName}) onto ${this.baseBranch} after resolving conflicts`);
+
+							// Sync local files to worktree after rebase
+							console.log(`[MERGE] Syncing local files to worktree...`);
+							await this.syncLocalFilesToWorktree(session.worktreePath);
+
+							conflictsResolvedDuringRebase = true;
+						} catch (continueError: any) {
+							console.error(`[MERGE] ERROR: Failed to continue rebase after conflict resolution:`, continueError);
+							// Abort the rebase
+							try {
+								console.log(`[MERGE] Aborting rebase...`);
+								execSync('git rebase --abort', {
+									cwd: session.worktreePath,
+									stdio: 'pipe'
+								});
+								console.log(`[MERGE] Rebase aborted`);
+							} catch (abortError) {
+								console.error(`[MERGE] ERROR: Failed to abort rebase for session ${sessionId}:`, abortError);
+							}
+							return { success: false, error: 'Rebase continuation failed after conflict resolution.' };
+						}
+					}
+				} else {
+					// Claude couldn't resolve conflicts, abort the rebase
+					try {
+						execSync('git rebase --abort', {
+							cwd: session.worktreePath,
+							stdio: 'pipe'
+						});
+					} catch (abortError) {
+						console.error(`Failed to abort rebase for session ${sessionId}:`, abortError);
+					}
+
+					const errorMessage = rebaseError.message || String(rebaseError);
+					console.error(`Rebase failed for session ${sessionId}:`, errorMessage);
+					return { success: false, error: `Rebase failed. Conflicts could not be resolved automatically.` };
+				}
 			}
 
 			// Switch to base branch in main repo
@@ -885,7 +1100,7 @@ export class SessionManager {
 			// Keep the session alive - no cleanup needed
 			// Tab remains open and worktree/branch are preserved
 
-			return { success: true };
+			return { success: true, conflictsResolved: conflictsResolvedDuringRebase };
 		} catch (error: any) {
 			const errorMessage = error.message || String(error);
 			console.error(`Merge failed for session ${sessionId}:`, errorMessage);
@@ -915,4 +1130,5 @@ export interface GitStatus {
 export interface MergeResult {
 	success: boolean;
 	error?: string;
+	conflictsResolved?: boolean;
 }

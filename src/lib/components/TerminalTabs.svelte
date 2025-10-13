@@ -7,6 +7,7 @@
 	import CloseTabDialog from './CloseTabDialog.svelte';
 	import CommitMessageDialog from './CommitMessageDialog.svelte';
 	import ConfirmationDialog from './ConfirmationDialog.svelte';
+	import RebaseConflictDialog from './RebaseConflictDialog.svelte';
 
 	const version = getContext<string>('version');
 
@@ -26,6 +27,7 @@
 	let showCloseDialog = false;
 	let showCommitDialog = false;
 	let showDiscardConfirmDialog = false;
+	let showRebaseConflictDialog = false;
 	let dialogError = '';
 	let closeError = '';
 	let successMessage = '';
@@ -37,6 +39,7 @@
 	let isExitClose = false;
 	let isRestarting = false;
 	let mergingTabIds = new Set<string>(); // Track tabs currently being merged
+	let operationInProgress = new Set<string>(); // Track tabs with operations in progress
 
 	function handleNewTabClick() {
 		showBranchDialog = true;
@@ -257,13 +260,39 @@
 		event.stopPropagation();
 		if (!tab.sessionId) return;
 
-		// Directly merge (without committing uncommitted changes)
-		const result = await performMerge(tab.sessionId);
-		if (result.success) {
-			successMessage = 'Branch merged successfully';
-			setTimeout(() => successMessage = '', 4000);
-		} else {
-			closeError = result.error || 'Merge failed';
+		// Check if operation already in progress
+		if (operationInProgress.has(tab.id)) return;
+
+		try {
+			// Mark operation as in progress
+			operationInProgress.add(tab.id);
+			operationInProgress = operationInProgress; // Trigger reactivity
+
+			// Directly merge (without committing uncommitted changes)
+			const result = await performMerge(tab.sessionId);
+
+			// Remove from in-progress set
+			operationInProgress.delete(tab.id);
+			operationInProgress = operationInProgress; // Trigger reactivity
+
+			if (result.success) {
+				if (result.conflictsResolved) {
+					// Show dialog about automatic conflict resolution
+					showRebaseConflictDialog = true;
+				} else {
+					successMessage = 'Branch merged successfully';
+					setTimeout(() => successMessage = '', 4000);
+				}
+			} else {
+				closeError = result.error || 'Merge failed';
+				setTimeout(() => closeError = '', 5000);
+			}
+		} catch (error: any) {
+			// Remove from in-progress set on error
+			operationInProgress.delete(tab.id);
+			operationInProgress = operationInProgress; // Trigger reactivity
+
+			closeError = error.message || 'Merge failed';
 			setTimeout(() => closeError = '', 5000);
 		}
 	}
@@ -282,6 +311,9 @@
 		event.stopPropagation();
 		if (!tab.sessionId) return;
 
+		// Check if operation already in progress
+		if (operationInProgress.has(tab.id)) return;
+
 		const backend = getGitBackend(tab.sessionId);
 		if (!backend) {
 			closeError = 'No backend connection';
@@ -290,15 +322,31 @@
 		}
 
 		try {
+			// Mark operation as in progress
+			operationInProgress.add(tab.id);
+			operationInProgress = operationInProgress; // Trigger reactivity
+
 			const result = await backend.performRebase();
+
+			// Remove from in-progress set
+			operationInProgress.delete(tab.id);
+			operationInProgress = operationInProgress; // Trigger reactivity
+
 			if (!result.success) {
 				closeError = result.error || 'Rebase failed';
 				setTimeout(() => closeError = '', 5000);
+			} else if (result.conflictsResolved) {
+				// Show dialog about automatic conflict resolution
+				showRebaseConflictDialog = true;
 			} else {
 				successMessage = 'Branch rebased successfully';
 				setTimeout(() => successMessage = '', 4000);
 			}
 		} catch (error: any) {
+			// Remove from in-progress set on error
+			operationInProgress.delete(tab.id);
+			operationInProgress = operationInProgress; // Trigger reactivity
+
 			closeError = error.message || 'Rebase failed';
 			setTimeout(() => closeError = '', 5000);
 		}
@@ -336,6 +384,10 @@
 	function handleDiscardCancel() {
 		showDiscardConfirmDialog = false;
 		pendingDiscardTab = null;
+	}
+
+	function handleRebaseConflictClose() {
+		showRebaseConflictDialog = false;
 	}
 
 	function selectTab(id: string) {
@@ -377,6 +429,11 @@
 	on:cancel={handleDiscardCancel}
 />
 
+<RebaseConflictDialog
+	bind:show={showRebaseConflictDialog}
+	on:close={handleRebaseConflictClose}
+/>
+
 <div class="tabs-container">
 	<div class="tabs">
 		{#each $terminals as tab (tab.id)}
@@ -410,12 +467,18 @@
 							{/if}
 							{#if tab.gitStatus.hasUnmergedCommits}
 								<div class="badge merge-badge" title="The branch contains pending commits that are not merged yet. Click to merge them.">
+									{#if operationInProgress.has(tab.id)}
+										<span class="spinner"></span>
+									{/if}
 									<span class="badge-text" on:click={(e) => handleMergeBadgeClick(tab, e)}>Unmerged</span>
 									<button class="badge-x" on:click={(e) => handleResetToBaseClick(tab, e)}>×</button>
 								</div>
 							{/if}
 							{#if tab.gitStatus.isBehindBase}
 								<div class="badge rebase-badge" on:click={(e) => handleRebaseBadgeClick(tab, e)} title="Current branch is behind the base branch. Click to rebase">
+									{#if operationInProgress.has(tab.id)}
+										<span class="spinner"></span>
+									{/if}
 									<span class="badge-text">Outdated</span>
 								</div>
 							{/if}
@@ -699,5 +762,21 @@
 		user-select: none;
 		pointer-events: none;
 		z-index: 1000;
+	}
+
+	.spinner {
+		display: inline-block;
+		width: 10px;
+		height: 10px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: currentColor;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		margin-right: 4px;
+		flex-shrink: 0;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 </style>

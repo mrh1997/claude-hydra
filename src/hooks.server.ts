@@ -156,21 +156,29 @@ function initWebSocketServer() {
 						break;
 
 					case 'merge':
-						// Merge session branch to base branch
+						// Merge session branch to base branch (non-blocking)
 						// Accept sessionId from message payload or use connection's sessionId
 						const mergeSessionId = data.sessionId || sessionId;
 						if (mergeSessionId) {
-							const result = await sessionManager.merge(mergeSessionId, data.commitMessage);
+							// Don't await - run async to keep WebSocket responsive during long operations
+							sessionManager.merge(mergeSessionId, data.commitMessage).then((result) => {
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({ type: 'mergeResult', result }));
+								}
 
-							ws.send(JSON.stringify({ type: 'mergeResult', result }));
-
-							// After successful merge, broadcast updated git status to all tabs
-							if (result.success) {
-								broadcastGitStatusToAll(
-									sessionManager.getAllSessions(),
-									(sid) => sessionManager.getGitStatus(sid)
-								);
-							}
+								// After successful merge, broadcast updated git status to all tabs
+								if (result.success) {
+									broadcastGitStatusToAll(
+										sessionManager.getAllSessions(),
+										(sid) => sessionManager.getGitStatus(sid)
+									);
+								}
+							}).catch((error) => {
+								console.error('Merge error:', error);
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({ type: 'mergeResult', result: { success: false, error: error.message } }));
+								}
+							});
 						}
 						break;
 
@@ -244,23 +252,32 @@ function initWebSocketServer() {
 						break;
 
 					case 'rebase':
-						// Rebase branch onto base
+						// Rebase branch onto base (non-blocking)
 						const rebaseSessionId = data.sessionId || sessionId;
 						if (rebaseSessionId) {
-							const rebaseResult = await sessionManager.rebase(rebaseSessionId);
-							ws.send(JSON.stringify({ type: 'rebaseResult', result: rebaseResult }));
-
-							// Send updated git status with commit log after rebase
-							try {
-								const gitStatus = sessionManager.getGitStatus(rebaseSessionId);
-								const commitLog = sessionManager.getCommitLog(rebaseSessionId);
-								const targetBranch = ptyManager.getBranchName(rebaseSessionId);
-								if (targetBranch) {
-									sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+							// Don't await - run async to keep WebSocket responsive during long operations
+							sessionManager.rebase(rebaseSessionId).then((rebaseResult) => {
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({ type: 'rebaseResult', result: rebaseResult }));
 								}
-							} catch (error) {
-								console.error('Failed to send git status after rebase:', error);
-							}
+
+								// Send updated git status with commit log after rebase
+								try {
+									const gitStatus = sessionManager.getGitStatus(rebaseSessionId);
+									const commitLog = sessionManager.getCommitLog(rebaseSessionId);
+									const targetBranch = ptyManager.getBranchName(rebaseSessionId);
+									if (targetBranch) {
+										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+									}
+								} catch (error) {
+									console.error('Failed to send git status after rebase:', error);
+								}
+							}).catch((error) => {
+								console.error('Rebase error:', error);
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({ type: 'rebaseResult', result: { success: false, error: error.message } }));
+								}
+							});
 						}
 						break;
 

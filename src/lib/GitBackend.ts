@@ -164,7 +164,7 @@ export class GitBackend {
 			'merge',
 			commitMessage ? { commitMessage } : {},
 			'mergeResult',
-			10000 // Longer timeout for merge
+			120000 // 2 minutes timeout for merge (Claude CLI may need time to resolve conflicts)
 		);
 	}
 
@@ -176,7 +176,7 @@ export class GitBackend {
 			'rebase',
 			{},
 			'rebaseResult',
-			10000 // Longer timeout for rebase
+			120000 // 2 minutes timeout for rebase (Claude CLI may need time to resolve conflicts)
 		);
 	}
 
