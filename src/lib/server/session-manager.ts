@@ -31,9 +31,18 @@ export class SessionManager {
 	private baseDir: string;
 	private repoRoot: string;
 	private baseBranch: string;
-	private sessions = new Map<string, SessionInfo>();
+	private sessions: Map<string, SessionInfo>;
 
 	constructor() {
+		// Persist sessions Map across HMR reloads
+		if (globalThis.__sessionManagerSessions) {
+			this.sessions = globalThis.__sessionManagerSessions;
+			console.log(`Reusing existing sessions Map from HMR (${this.sessions.size} active sessions)`);
+		} else {
+			this.sessions = new Map<string, SessionInfo>();
+			globalThis.__sessionManagerSessions = this.sessions;
+		}
+
 		// Use CLAUDE_HYDRA_REPO_DIR if set, otherwise use current directory
 		const baseRepoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
 
@@ -254,11 +263,16 @@ export class SessionManager {
 	 * @returns Session ID if found, undefined otherwise
 	 */
 	getSessionIdByBranch(branchName: string): string | undefined {
+		console.log(`[getSessionIdByBranch] Looking up sessionId for branch="${branchName}"`);
+		console.log(`[getSessionIdByBranch] Active sessions count: ${this.sessions.size}`);
 		for (const [sessionId, session] of this.sessions) {
+			console.log(`[getSessionIdByBranch] Checking session: sessionId="${sessionId}", branchName="${session.branchName}"`);
 			if (session.branchName === branchName) {
+				console.log(`[getSessionIdByBranch] Found matching sessionId: ${sessionId}`);
 				return sessionId;
 			}
 		}
+		console.log(`[getSessionIdByBranch] No matching sessionId found for branch="${branchName}"`);
 		return undefined;
 	}
 
@@ -554,43 +568,58 @@ export class SessionManager {
 	 * @returns Status object with uncommitted changes, unmerged commits, and behind base flags
 	 */
 	getGitStatus(sessionId: string): GitStatus {
+		console.log(`[getGitStatus] Called for sessionId="${sessionId}"`);
 		const session = this.sessions.get(sessionId);
 		if (!session) {
+			console.log(`[getGitStatus] Session not found: ${sessionId}`);
 			throw new Error(`Session ${sessionId} not found`);
 		}
 
+		console.log(`[getGitStatus] Session found: branchName="${session.branchName}", worktreePath="${session.worktreePath}"`);
+
 		try {
 			// Check for uncommitted changes (working tree + staged)
+			console.log(`[getGitStatus] Running: git status --porcelain in ${session.worktreePath}`);
 			const statusOutput = execSync('git status --porcelain', {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
 			}).trim();
+			console.log(`[getGitStatus] git status output (${statusOutput.length} chars): "${statusOutput}"`);
 			const hasUncommittedChanges = statusOutput.length > 0;
+			console.log(`[getGitStatus] hasUncommittedChanges: ${hasUncommittedChanges}`);
 
 			// Check for unmerged commits (commits in branch that aren't in base)
+			console.log(`[getGitStatus] Running: git log ${this.baseBranch}..${session.branchName} --oneline`);
 			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --oneline`, {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
 			}).trim();
+			console.log(`[getGitStatus] git log output (${logOutput.length} chars)`);
 			const hasUnmergedCommits = logOutput.length > 0;
+			console.log(`[getGitStatus] hasUnmergedCommits: ${hasUnmergedCommits}`);
 
 			// Check if branch is behind base (base has commits not in branch)
+			console.log(`[getGitStatus] Running: git rev-list --count HEAD..${this.baseBranch}`);
 			const behindOutput = execSync(`git rev-list --count HEAD..${this.baseBranch}`, {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
 			}).trim();
+			console.log(`[getGitStatus] git rev-list output: "${behindOutput}"`);
 			const isBehindBase = parseInt(behindOutput) > 0;
+			console.log(`[getGitStatus] isBehindBase: ${isBehindBase}`);
 
-			return {
+			const result = {
 				hasUncommittedChanges,
 				hasUnmergedCommits,
 				isBehindBase
 			};
+			console.log(`[getGitStatus] Returning:`, JSON.stringify(result));
+			return result;
 		} catch (error: any) {
-			console.error(`Error getting git status for session ${sessionId}:`, error);
+			console.error(`[getGitStatus] Error getting git status for session ${sessionId}:`, error);
 			throw new Error(`Failed to get git status: ${error.message}`);
 		}
 	}
