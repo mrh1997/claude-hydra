@@ -33,8 +33,8 @@ function createTerminalsStore() {
 			update(tabs => {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
-				// Add new tab
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'ready', adoptExisting, gitStatus: null, commitLog: null }];
+				// Add new tab (start as 'running' until backend detects prompt)
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'running', adoptExisting, gitStatus: null, commitLog: null }];
 			});
 		},
 		removeTab: (id: string) => {

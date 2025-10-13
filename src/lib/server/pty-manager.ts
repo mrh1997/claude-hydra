@@ -13,6 +13,7 @@ export interface TerminalSession {
 	ptyProcess: pty.IPty;
 	onData: (data: string) => void;
 	onExit: () => void;
+	waitForPrompt: boolean;
 }
 
 export class PtyManager {
@@ -275,7 +276,16 @@ export class PtyManager {
 			id: sessionId,
 			branchName,
 			ptyProcess,
-			onData: (data: string) => onData(sessionId, data),
+			waitForPrompt: true,
+			onData: (data: string) => {
+				// Scan for ">" prompt when waiting for initial prompt
+				if (session.waitForPrompt && data.includes('>')) {
+					session.waitForPrompt = false;
+					sendReadyStateWithGitStatus(branchName);
+				}
+				// Forward data to client
+				onData(sessionId, data);
+			},
 			onExit: () => {
 				this.sessions.delete(sessionId);
 				onExit(sessionId);
