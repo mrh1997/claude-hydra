@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node claude-hydra-server.js --dev",
     "build": "vite build",
-    "preview": "node claude-hydra-server.js",
+    "preview": "vite build && node claude-hydra-server.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
   },
