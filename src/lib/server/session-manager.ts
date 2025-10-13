@@ -584,9 +584,9 @@ export class SessionManager {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
-			}).trim();
+			});
 			console.log(`[getGitStatus] git status output (${statusOutput.length} chars): "${statusOutput}"`);
-			const hasUncommittedChanges = statusOutput.length > 0;
+			const hasUncommittedChanges = statusOutput.trim().length > 0;
 			console.log(`[getGitStatus] hasUncommittedChanges: ${hasUncommittedChanges}`);
 
 			// Check for unmerged commits (commits in branch that aren't in base)
@@ -701,7 +701,7 @@ export class SessionManager {
 			cwd: session.worktreePath,
 			encoding: 'utf8',
 			stdio: 'pipe'
-		}).trim();
+		});
 
 		// Get all tracked files
 		const trackedOutput = execSync('git ls-files', {
@@ -712,8 +712,9 @@ export class SessionManager {
 
 		// Parse status into a map
 		const statusMap = new Map<string, FileStatus>();
-		if (statusOutput) {
+		if (statusOutput.trim()) {
 			for (const line of statusOutput.split('\n')) {
+				if (!line) continue; // Skip empty lines
 				// Format: XY PATH or XY PATH -> ORIGPATH (for renames)
 				const xy = line.substring(0, 2);
 				const path = line.substring(3).split(' -> ')[0].trim();
