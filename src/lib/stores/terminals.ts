@@ -4,6 +4,7 @@ export interface CommitInfo {
 	hash: string;
 	timestamp: number;
 	message: string;
+	fullMessage: string;
 }
 
 export interface GitStatus {

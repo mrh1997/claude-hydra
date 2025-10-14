@@ -637,8 +637,9 @@ export class SessionManager {
 
 		try {
 			// Get commits from base branch to current branch
-			// Format: hash|timestamp|subject (first line of commit message)
-			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --format="%h|%at|%s"`, {
+			// Format: hash|timestamp|subject|fullMessage
+			// Using %x00 (null byte) as separator to handle messages with pipes
+			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --format="%h%x00%at%x00%s%x00%B%x00"`, {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
@@ -649,15 +650,29 @@ export class SessionManager {
 				return [];
 			}
 
-			const commits = logOutput.split('\n').map(line => {
-				const [hash, timestampStr, ...messageParts] = line.split('|');
-				const message = messageParts.join('|'); // Rejoin in case message contains |
-				return {
+			// Split by the pattern: null byte followed by newline
+			// Each commit ends with: %B%x00 which produces: body<null><newline>
+			const commits: CommitInfo[] = [];
+			const entries = logOutput.split('\x00\n');
+
+			for (const entry of entries) {
+				if (!entry.trim()) continue;
+
+				const parts = entry.split('\x00');
+				if (parts.length < 3) continue;
+
+				const hash = parts[0] || '';
+				const timestampStr = parts[1] || '0';
+				const message = parts[2] || '';
+				const fullMessage = parts[3] || message;
+
+				commits.push({
 					hash: hash.substring(0, 4), // First 4 characters of hash
 					timestamp: parseInt(timestampStr, 10),
-					message
-				};
-			});
+					message,
+					fullMessage: fullMessage.trim()
+				});
+			}
 
 			return commits;
 		} catch (error: any) {
@@ -1305,6 +1320,7 @@ export interface CommitInfo {
 	hash: string;
 	timestamp: number;
 	message: string;
+	fullMessage: string;
 }
 
 export interface GitStatus {

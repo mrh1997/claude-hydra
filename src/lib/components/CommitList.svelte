@@ -11,6 +11,14 @@
 	// Track selected commit (null = working tree)
 	let selectedCommitId: string | null = null;
 
+	// Tooltip state
+	let hoveredCommitHash: string | null = null;
+	let showTooltip: boolean = false;
+	let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
+	let tooltipRight: number = 0;
+	let tooltipY: number = 0;
+	let commitPanelElement: HTMLDivElement;
+
 	/**
 	 * Format timestamp for display.
 	 * Last 7 days: "Mo 12:03" format
@@ -41,9 +49,49 @@
 		selectedCommitId = commitId;
 		onCommitSelect(commitId);
 	}
+
+	function handleMouseEnter(event: MouseEvent, commit: CommitInfo) {
+		// Clear any existing timer
+		if (tooltipTimer) {
+			clearTimeout(tooltipTimer);
+		}
+
+		// Capture the target element NOW, before setTimeout
+		// event.currentTarget becomes null after the event handler completes
+		const target = event.currentTarget as HTMLElement;
+
+		// Start 1-second timer
+		tooltipTimer = setTimeout(() => {
+			if (!commitPanelElement || !target) return;
+
+			hoveredCommitHash = commit.hash;
+
+			// Position tooltip below the commit row, right-aligned with the panel
+			const targetRect = target.getBoundingClientRect();
+			const panelRect = commitPanelElement.getBoundingClientRect();
+
+			// Calculate distance from right edge of viewport to align tooltip's right edge with panel's right edge
+			tooltipRight = window.innerWidth - panelRect.right;
+			// Position tooltip directly below the hovered row
+			tooltipY = targetRect.bottom + 4;
+
+			// Show tooltip after position is calculated
+			showTooltip = true;
+		}, 1000);
+	}
+
+	function handleMouseLeave() {
+		// Clear timer and hide tooltip
+		if (tooltipTimer) {
+			clearTimeout(tooltipTimer);
+			tooltipTimer = null;
+		}
+		showTooltip = false;
+		hoveredCommitHash = null;
+	}
 </script>
 
-<div class="commit-panel" class:hidden={!active}>
+<div class="commit-panel" class:hidden={!active} bind:this={commitPanelElement}>
 	<div class="commit-list-section">
 		<div
 			class="commit-row commit-header"
@@ -64,6 +112,8 @@
 					class:selected={selectedCommitId === commit.hash}
 					on:click={() => selectCommit(commit.hash)}
 					on:keydown={(e) => e.key === 'Enter' && selectCommit(commit.hash)}
+					on:mouseenter={(e) => handleMouseEnter(e, commit)}
+					on:mouseleave={handleMouseLeave}
 					role="button"
 					tabindex="0"
 				>
@@ -79,6 +129,18 @@
 		<FileTree {files} {active} />
 	</div>
 </div>
+
+{#if showTooltip && hoveredCommitHash}
+	{@const hoveredCommit = commits?.find(c => c.hash === hoveredCommitHash)}
+	{#if hoveredCommit}
+		<div
+			class="tooltip"
+			style="right: {tooltipRight}px; top: {tooltipY}px;"
+		>
+			{hoveredCommit.fullMessage}
+		</div>
+	{/if}
+{/if}
 
 <style>
 	.commit-panel {
@@ -159,5 +221,22 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.tooltip {
+		position: fixed;
+		background-color: #2d2d2d;
+		border: 1px solid #3e3e3e;
+		border-radius: 3px;
+		padding: 8px 12px;
+		color: #cccccc;
+		font-family: 'Consolas', 'Courier New', monospace;
+		font-size: 12px;
+		max-width: 500px;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+		z-index: 1000;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+		pointer-events: none;
 	}
 </style>
