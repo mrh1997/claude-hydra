@@ -7,6 +7,7 @@
 	export let active: boolean = false;
 	export let files: FileInfo[] | null = null;
 	export let onCommitSelect: (commitId: string | null) => void;
+	export let width: number = 350;
 
 	// Track selected commit (null = working tree)
 	let selectedCommitId: string | null = null;
@@ -91,7 +92,7 @@
 	}
 </script>
 
-<div class="commit-panel" class:hidden={!active} bind:this={commitPanelElement}>
+<div class="commit-panel" class:hidden={!active} style="width: {width}px" bind:this={commitPanelElement}>
 	<div class="commit-list-section">
 		<div
 			class="commit-row commit-header"
@@ -144,7 +145,6 @@
 
 <style>
 	.commit-panel {
-		width: min(350px, 30vw);
 		background-color: #1e1e1e;
 		border-left: 1px solid #333333;
 		color: #cccccc;
@@ -153,6 +153,7 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		flex-shrink: 0;
 	}
 
 	.commit-panel.hidden {

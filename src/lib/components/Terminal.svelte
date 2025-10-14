@@ -4,6 +4,7 @@
 	import { GitBackend, type FileInfo } from '$lib/GitBackend';
 	import { gitBackends } from '$lib/stores/gitBackends';
 	import CommitList from './CommitList.svelte';
+	import Splitter from './Splitter.svelte';
 
 	export let terminalId: string;
 	export let active: boolean = false;
@@ -20,6 +21,9 @@
 	let sessionId: string | null = null;
 	let gitBackend: GitBackend | null = null;
 	let files: FileInfo[] | null = null;
+	let commitListWidth = 350; // Default width for commit list panel
+	const MIN_COMMIT_LIST_WIDTH = 200;
+	const MIN_TERMINAL_WIDTH = 200; // Minimum width for terminal
 
 	onMount(async () => {
 		// Dynamic imports to avoid SSR issues
@@ -255,11 +259,21 @@
 			gitBackend.requestFileList(commitId);
 		}
 	}
+
+	function handleSplitterResize(event: CustomEvent<number>) {
+		const newWidth = event.detail;
+		const containerWidth = terminalElement?.parentElement?.offsetWidth || 0;
+		const maxWidth = containerWidth - MIN_TERMINAL_WIDTH - 4; // 4px for splitter
+
+		// Clamp width between min and max
+		commitListWidth = Math.max(MIN_COMMIT_LIST_WIDTH, Math.min(newWidth, maxWidth));
+	}
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
-	<div bind:this={terminalElement} class="terminal"></div>
-	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} />
+	<div bind:this={terminalElement} class="terminal" style="width: calc(100% - {commitListWidth + 4}px)"></div>
+	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
+	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} width={commitListWidth} />
 </div>
 
 <style>
@@ -279,7 +293,7 @@
 	}
 
 	.terminal {
-		flex: 1;
 		height: 100%;
+		flex-shrink: 0;
 	}
 </style>
