@@ -414,17 +414,13 @@ function initManagementWebSocketServer() {
 			if (isHeadless) {
 				// In headless mode, allow sequential sessions - don't shutdown
 				console.log('Management client disconnected - allowing next connection (headless mode)');
-			} else if (isDev) {
-				// In development, wait 5 seconds before shutting down to handle HMR
-				console.log('Management client disconnected - waiting 5s before shutdown (HMR tolerance)');
+			} else {
+				// Wait 5 seconds before shutting down to handle page reloads and HMR
+				console.log('Management client disconnected - waiting 5s before shutdown');
 				shutdownTimeout = setTimeout(() => {
 					console.log('No reconnection within 5s - shutting down server');
 					process.exit(0);
 				}, 5000);
-			} else {
-				// In production, shut down immediately
-				console.log('Management client disconnected - shutting down server');
-				process.exit(0);
 			}
 		});
 
