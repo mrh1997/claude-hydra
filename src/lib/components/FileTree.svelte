@@ -28,7 +28,14 @@
 		const nodeMap = new Map<string, TreeNode>();
 
 		for (const file of fileList) {
-			const parts = file.path.split('/');
+			// Skip files with empty paths
+			if (!file.path || !file.path.trim()) continue;
+
+			const parts = file.path.split('/').filter(part => part.length > 0);
+
+			// Skip if no valid path parts (e.g., path was just slashes)
+			if (parts.length === 0) continue;
+
 			let currentPath = '';
 
 			for (let i = 0; i < parts.length; i++) {

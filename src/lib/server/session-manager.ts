@@ -696,13 +696,6 @@ export class SessionManager {
 	 * Gets file list for working tree with status information.
 	 */
 	private getWorkingTreeFileList(session: SessionInfo): FileInfo[] {
-		// Get status of modified/added/deleted files
-		const statusOutput = execSync('git status --porcelain', {
-			cwd: session.worktreePath,
-			encoding: 'utf8',
-			stdio: 'pipe'
-		});
-
 		// Get all tracked files
 		const trackedOutput = execSync('git ls-files', {
 			cwd: session.worktreePath,
@@ -710,23 +703,46 @@ export class SessionManager {
 			stdio: 'pipe'
 		}).trim();
 
-		// Parse status into a map
+		// Get status of modified/added/deleted tracked files
+		const statusOutput = execSync('git status --porcelain', {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		});
+
+		// Get untracked files individually (not collapsed as directories)
+		const untrackedOutput = execSync('git ls-files --others --exclude-standard', {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		}).trim();
+
+		// Parse status into a map (only for tracked files)
 		const statusMap = new Map<string, FileStatus>();
 		if (statusOutput.trim()) {
 			for (const line of statusOutput.split('\n')) {
 				if (!line) continue; // Skip empty lines
 				// Format: XY PATH or XY PATH -> ORIGPATH (for renames)
 				const xy = line.substring(0, 2);
-				const path = line.substring(3).split(' -> ')[0].trim();
+				let path = line.substring(3).split(' -> ')[0].trim();
 
 				const x = xy[0]; // Index status
 				const y = xy[1]; // Working tree status
 
+				// Skip untracked files (we'll handle them separately)
+				if (x === '?' && y === '?') {
+					continue;
+				}
+
+				// Normalize path separators to forward slashes
+				path = path.replace(/\\/g, '/');
+
+				// Skip empty paths
+				if (!path) continue;
+
 				// Determine file status based on git status codes
 				let status: FileStatus = 'unchanged';
-				if (x === '?' || y === '?') {
-					status = 'untracked';
-				} else if (x === 'A' || y === 'A') {
+				if (x === 'A' || y === 'A') {
 					status = 'added';
 				} else if (x === 'D' || y === 'D') {
 					status = 'deleted';
@@ -741,7 +757,14 @@ export class SessionManager {
 		// Build file list with all tracked files
 		const files: FileInfo[] = [];
 		if (trackedOutput) {
-			for (const path of trackedOutput.split('\n')) {
+			for (let path of trackedOutput.split('\n')) {
+				path = path.trim();
+				// Skip empty paths
+				if (!path) continue;
+
+				// Normalize path separators to forward slashes
+				path = path.replace(/\\/g, '/');
+
 				files.push({
 					path,
 					status: statusMap.get(path) || 'unchanged'
@@ -749,10 +772,17 @@ export class SessionManager {
 			}
 		}
 
-		// Add untracked files
-		for (const [path, status] of statusMap) {
-			if (status === 'untracked') {
-				files.push({ path, status });
+		// Add untracked files (now properly expanded)
+		if (untrackedOutput) {
+			for (let path of untrackedOutput.split('\n')) {
+				path = path.trim();
+				// Skip empty paths
+				if (!path) continue;
+
+				// Normalize path separators to forward slashes
+				path = path.replace(/\\/g, '/');
+
+				files.push({ path, status: 'untracked' });
 			}
 		}
 
