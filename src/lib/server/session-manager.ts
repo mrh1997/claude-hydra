@@ -1038,6 +1038,78 @@ export class SessionManager {
 	}
 
 	/**
+	 * Gets the diff for a specific file.
+	 * @param sessionId - Session identifier
+	 * @param filePath - Path to the file
+	 * @param commitId - Commit hash (or null for working tree)
+	 * @returns Object with original and modified content
+	 */
+	getFileDiff(sessionId: string, filePath: string, commitId: string | null): { original: string; modified: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new Error(`Session ${sessionId} not found`);
+		}
+
+		try {
+			let original = '';
+			let modified = '';
+
+			if (commitId === null) {
+				// Working tree: compare HEAD vs working directory
+				try {
+					// Get file content from HEAD
+					original = execSync(`git show HEAD:"${filePath}"`, {
+						cwd: session.worktreePath,
+						encoding: 'utf8',
+						stdio: 'pipe'
+					});
+				} catch (error) {
+					// File might be new (not in HEAD), so original is empty
+					original = '';
+				}
+
+				// Get file content from working directory
+				try {
+					modified = readFileSync(join(session.worktreePath, filePath), 'utf8');
+				} catch (error) {
+					// File might be deleted, so modified is empty
+					modified = '';
+				}
+			} else {
+				// Specific commit: compare commit^ vs commit
+				try {
+					// Get file content from commit's parent
+					original = execSync(`git show "${commitId}^:${filePath}"`, {
+						cwd: session.worktreePath,
+						encoding: 'utf8',
+						stdio: 'pipe'
+					});
+				} catch (error) {
+					// File might be new in this commit, so original is empty
+					original = '';
+				}
+
+				try {
+					// Get file content from commit
+					modified = execSync(`git show "${commitId}:${filePath}"`, {
+						cwd: session.worktreePath,
+						encoding: 'utf8',
+						stdio: 'pipe'
+					});
+				} catch (error) {
+					// File might be deleted in this commit, so modified is empty
+					modified = '';
+				}
+			}
+
+			return { original, modified };
+		} catch (error: any) {
+			console.error(`Error getting file diff for session ${sessionId}:`, error);
+			throw new Error(`Failed to get file diff: ${error.message}`);
+		}
+	}
+
+	/**
 	 * Commits all changes in a session's worktree.
 	 * @param sessionId - Session identifier
 	 * @param message - Commit message

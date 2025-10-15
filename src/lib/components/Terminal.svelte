@@ -5,6 +5,7 @@
 	import { gitBackends } from '$lib/stores/gitBackends';
 	import CommitList from './CommitList.svelte';
 	import Splitter from './Splitter.svelte';
+	import DiffViewer from './DiffViewer.svelte';
 
 	export let terminalId: string;
 	export let active: boolean = false;
@@ -24,6 +25,13 @@
 	let commitListWidth = 350; // Default width for commit list panel
 	const MIN_COMMIT_LIST_WIDTH = 200;
 	const MIN_TERMINAL_WIDTH = 200; // Minimum width for terminal
+
+	// Diff viewer state
+	let showDiffViewer = false;
+	let diffFileName = '';
+	let diffOriginalContent = '';
+	let diffModifiedContent = '';
+	let diffLanguage = 'plaintext';
 
 	onMount(async () => {
 		// Dynamic imports to avoid SSR issues
@@ -207,6 +215,14 @@
 						dispatch('exit', { terminalId });
 						break;
 
+					case 'fileDiff':
+						// Handle file diff response
+						diffOriginalContent = message.original || '';
+						diffModifiedContent = message.modified || '';
+						diffLanguage = getLanguageFromFileName(diffFileName);
+						showDiffViewer = true;
+						break;
+
 					case 'error':
 						terminal.write(`\r\n\x1b[31mError: ${message.error}\x1b[0m\r\n`);
 						// Close the tab after showing error
@@ -268,12 +284,75 @@
 		// Clamp width between min and max
 		commitListWidth = Math.max(MIN_COMMIT_LIST_WIDTH, Math.min(newWidth, maxWidth));
 	}
+
+	function handleFileClick(event: CustomEvent<{ path: string; status: string; commitId: string | null }>) {
+		const { path, commitId } = event.detail;
+
+		// Request file diff from backend
+		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+			diffFileName = path;
+			ws.send(JSON.stringify({
+				type: 'getFileDiff',
+				sessionId,
+				filePath: path,
+				commitId: commitId
+			}));
+		}
+	}
+
+	function handleCloseDiff() {
+		showDiffViewer = false;
+		diffFileName = '';
+		diffOriginalContent = '';
+		diffModifiedContent = '';
+	}
+
+	function getLanguageFromFileName(fileName: string): string {
+		const ext = fileName.split('.').pop()?.toLowerCase() || '';
+		const languageMap: { [key: string]: string } = {
+			'js': 'javascript',
+			'ts': 'typescript',
+			'jsx': 'javascript',
+			'tsx': 'typescript',
+			'py': 'python',
+			'java': 'java',
+			'c': 'c',
+			'cpp': 'cpp',
+			'cs': 'csharp',
+			'go': 'go',
+			'rs': 'rust',
+			'rb': 'ruby',
+			'php': 'php',
+			'swift': 'swift',
+			'kt': 'kotlin',
+			'json': 'json',
+			'xml': 'xml',
+			'html': 'html',
+			'css': 'css',
+			'scss': 'scss',
+			'md': 'markdown',
+			'sql': 'sql',
+			'sh': 'shell',
+			'yaml': 'yaml',
+			'yml': 'yaml'
+		};
+		return languageMap[ext] || 'plaintext';
+	}
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
-	<div bind:this={terminalElement} class="terminal" style="width: calc(100% - {commitListWidth + 4}px)"></div>
+	<div bind:this={terminalElement} class="terminal" style="width: calc(100% - {commitListWidth + 4}px)" class:hidden={showDiffViewer}></div>
+	<DiffViewer
+		originalContent={diffOriginalContent}
+		modifiedContent={diffModifiedContent}
+		fileName={diffFileName}
+		language={diffLanguage}
+		active={showDiffViewer}
+		width={commitListWidth}
+		on:close={handleCloseDiff}
+	/>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
-	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} width={commitListWidth} {gitBackend} />
+	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} />
 </div>
 
 <style>

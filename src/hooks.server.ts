@@ -419,6 +419,25 @@ function initWebSocketServer() {
 						}
 						break;
 
+					case 'getFileDiff':
+						// Get diff for a specific file
+						const diffSessionId = data.sessionId || sessionId;
+						if (diffSessionId) {
+							try {
+								const diff = sessionManager.getFileDiff(diffSessionId, data.filePath, data.commitId || null);
+								ws.send(JSON.stringify({
+									type: 'fileDiff',
+									original: diff.original,
+									modified: diff.modified
+								}));
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to get file diff:', errorMessage);
+								ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
+							}
+						}
+						break;
+
 					case 'destroy':
 						// Destroy terminal session
 						if (sessionId) {

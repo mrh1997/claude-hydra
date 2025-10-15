@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createEventDispatcher } from 'svelte';
 	import DeleteConfirmationDialog from './DeleteConfirmationDialog.svelte';
 	import CreateFileDialog from './CreateFileDialog.svelte';
 	import type { GitBackend } from '$lib/GitBackend';
@@ -7,6 +8,8 @@
 	export let active: boolean = false;
 	export let isWorktree: boolean = false;
 	export let gitBackend: GitBackend | null = null;
+
+	const dispatch = createEventDispatcher();
 
 	type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged' | 'ignored';
 
@@ -362,6 +365,26 @@
 		createErrorMessage = '';
 	}
 
+	/**
+	 * Handle file click - dispatch event to parent
+	 */
+	function handleFileClick(node: TreeNode) {
+		if (!node.isDirectory) {
+			dispatch('fileClick', { path: node.path, status: node.status });
+		}
+	}
+
+	/**
+	 * Handle row click - toggle directory or open file
+	 */
+	function handleRowClick(node: TreeNode) {
+		if (node.isDirectory) {
+			toggleDirectory(node.path);
+		} else {
+			handleFileClick(node);
+		}
+	}
+
 	$: tree = files ? buildTree(files) : [];
 	$: filteredTree = filterTree(tree, filterMode);
 	$: flatTree = (expandedDirs, renderTree(filteredTree));
@@ -388,8 +411,9 @@
 					<div
 						class="file-row {getStatusColor(item.node.status)}"
 						class:directory={item.node.isDirectory}
+						class:file={!item.node.isDirectory}
 						style="padding-left: {item.depth * 16 + 8}px"
-						on:click={() => item.node.isDirectory && toggleDirectory(item.node.path)}
+						on:click={() => handleRowClick(item.node)}
 						on:mouseenter={() => hoveredPath = item.node.path}
 						on:mouseleave={() => hoveredPath = null}
 						role="button"
@@ -491,7 +515,8 @@
 		position: relative;
 	}
 
-	.file-row.directory {
+	.file-row.directory,
+	.file-row.file {
 		cursor: pointer;
 	}
 

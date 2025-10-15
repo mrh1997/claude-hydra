@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createEventDispatcher } from 'svelte';
 	import type { CommitInfo } from '$lib/stores/terminals';
 	import FileTree from './FileTree.svelte';
 	import type { FileInfo } from '$lib/server/session-manager';
@@ -10,6 +11,8 @@
 	export let onCommitSelect: (commitId: string | null) => void;
 	export let width: number = 350;
 	export let gitBackend: GitBackend | null = null;
+
+	const dispatch = createEventDispatcher();
 
 	// Track selected commit (null = working tree)
 	let selectedCommitId: string | null = null;
@@ -92,6 +95,15 @@
 		showTooltip = false;
 		hoveredCommitHash = null;
 	}
+
+	function handleFileClick(event: CustomEvent<{ path: string; status: string }>) {
+		// Forward the fileClick event to parent, along with the currently selected commit
+		dispatch('fileClick', {
+			path: event.detail.path,
+			status: event.detail.status,
+			commitId: selectedCommitId
+		});
+	}
 </script>
 
 <div class="commit-panel" class:hidden={!active} style="width: {width}px" bind:this={commitPanelElement}>
@@ -129,7 +141,7 @@
 	</div>
 
 	<div class="file-tree-section">
-		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} />
+		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} on:fileClick={handleFileClick} />
 	</div>
 </div>
 
