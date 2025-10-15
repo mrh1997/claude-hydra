@@ -273,7 +273,7 @@
 <div class="terminal-container" class:hidden={!active}>
 	<div bind:this={terminalElement} class="terminal" style="width: calc(100% - {commitListWidth + 4}px)"></div>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
-	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} width={commitListWidth} />
+	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} width={commitListWidth} {gitBackend} />
 </div>
 
 <style>

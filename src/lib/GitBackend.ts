@@ -80,6 +80,8 @@ export class GitBackend {
 				case 'resetResult':
 				case 'rebaseResult':
 				case 'mergeResult':
+				case 'deleteFileResult':
+				case 'createFileResult':
 					pending.resolve(message.result);
 					break;
 				case 'restarted':
@@ -232,6 +234,31 @@ export class GitBackend {
 			sessionId: this.sessionId,
 			commitId
 		}));
+	}
+
+	/**
+	 * Delete a file or directory in the worktree
+	 * @param path - Path relative to worktree root
+	 */
+	async deleteFile(path: string): Promise<OperationResult> {
+		return this.sendRequest<OperationResult>(
+			'deleteFile',
+			{ path },
+			'deleteFileResult'
+		);
+	}
+
+	/**
+	 * Create a file or directory in the worktree
+	 * @param path - Path relative to worktree root
+	 * @param isDirectory - Whether to create a directory (true) or file (false)
+	 */
+	async createFile(path: string, isDirectory: boolean): Promise<OperationResult> {
+		return this.sendRequest<OperationResult>(
+			'createFile',
+			{ path, isDirectory },
+			'createFileResult'
+		);
 	}
 
 	/**

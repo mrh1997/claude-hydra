@@ -345,6 +345,80 @@ function initWebSocketServer() {
 						}
 						break;
 
+					case 'deleteFile':
+						// Delete a file or directory in the worktree
+						const deleteSessionId = data.sessionId || sessionId;
+						if (deleteSessionId) {
+							try {
+								const result = sessionManager.deleteFileOrDirectory(deleteSessionId, data.path);
+								ws.send(JSON.stringify({ type: 'deleteFileResult', result }));
+
+								// Refresh file list and git status after deletion
+								if (result.success) {
+									try {
+										const fileList = sessionManager.getFileList(deleteSessionId, null);
+										ws.send(JSON.stringify({
+											type: 'fileList',
+											commitId: null,
+											files: fileList
+										}));
+
+										// Update git status
+										const gitStatus = sessionManager.getGitStatus(deleteSessionId);
+										const commitLog = sessionManager.getCommitLog(deleteSessionId);
+										const targetBranch = ptyManager.getBranchName(deleteSessionId);
+										if (targetBranch) {
+											sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+										}
+									} catch (error) {
+										console.error('Failed to refresh file list after delete:', error);
+									}
+								}
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to delete file:', errorMessage);
+								ws.send(JSON.stringify({ type: 'deleteFileResult', result: { success: false, error: errorMessage } }));
+							}
+						}
+						break;
+
+					case 'createFile':
+						// Create a file or directory in the worktree
+						const createSessionId = data.sessionId || sessionId;
+						if (createSessionId) {
+							try {
+								const result = sessionManager.createFileOrDirectory(createSessionId, data.path, data.isDirectory);
+								ws.send(JSON.stringify({ type: 'createFileResult', result }));
+
+								// Refresh file list and git status after creation
+								if (result.success) {
+									try {
+										const fileList = sessionManager.getFileList(createSessionId, null);
+										ws.send(JSON.stringify({
+											type: 'fileList',
+											commitId: null,
+											files: fileList
+										}));
+
+										// Update git status
+										const gitStatus = sessionManager.getGitStatus(createSessionId);
+										const commitLog = sessionManager.getCommitLog(createSessionId);
+										const targetBranch = ptyManager.getBranchName(createSessionId);
+										if (targetBranch) {
+											sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+										}
+									} catch (error) {
+										console.error('Failed to refresh file list after create:', error);
+									}
+								}
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to create file:', errorMessage);
+								ws.send(JSON.stringify({ type: 'createFileResult', result: { success: false, error: errorMessage } }));
+							}
+						}
+						break;
+
 					case 'destroy':
 						// Destroy terminal session
 						if (sessionId) {

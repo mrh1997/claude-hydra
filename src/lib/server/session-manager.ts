@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, rmSync, readFileSync, copyFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, readFileSync, copyFileSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, basename, dirname, relative } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
@@ -708,6 +708,36 @@ export class SessionManager {
 	}
 
 	/**
+	 * Recursively scan filesystem for all directories
+	 */
+	private scanDirectories(dirPath: string, basePath: string): string[] {
+		const directories: string[] = [];
+
+		try {
+			const entries = readdirSync(dirPath, { withFileTypes: true });
+
+			for (const entry of entries) {
+				if (entry.isDirectory()) {
+					// Skip .git directory
+					if (entry.name === '.git') continue;
+
+					const fullPath = join(dirPath, entry.name);
+					const relativePath = relative(basePath, fullPath).replace(/\\/g, '/');
+
+					directories.push(relativePath);
+
+					// Recursively scan subdirectories
+					directories.push(...this.scanDirectories(fullPath, basePath));
+				}
+			}
+		} catch (error) {
+			console.error(`Error scanning directory ${dirPath}:`, error);
+		}
+
+		return directories;
+	}
+
+	/**
 	 * Gets file list for working tree with status information.
 	 */
 	private getWorkingTreeFileList(session: SessionInfo): FileInfo[] {
@@ -826,6 +856,23 @@ export class SessionManager {
 			}
 		}
 
+		// Scan filesystem for all directories (including empty ones)
+		const allDirectories = this.scanDirectories(session.worktreePath, session.worktreePath);
+
+		// Add directories that aren't already in the file list
+		const existingPaths = new Set(files.map(f => f.path));
+		for (const dirPath of allDirectories) {
+			if (!existingPaths.has(dirPath)) {
+				// Check if directory is ignored
+				const isIgnored = ignoredFiles.has(dirPath);
+				files.push({
+					path: dirPath,
+					status: isIgnored ? 'ignored' : 'untracked',
+					isDirectory: true
+				});
+			}
+		}
+
 		return files;
 	}
 
@@ -890,6 +937,104 @@ export class SessionManager {
 		}
 
 		return files;
+	}
+
+	/**
+	 * Deletes a file or directory in a session's worktree.
+	 * @param sessionId - Session identifier
+	 * @param relativePath - Path relative to worktree root
+	 * @returns Success status and optional error message
+	 */
+	deleteFileOrDirectory(sessionId: string, relativePath: string): { success: boolean; error?: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// Construct absolute path
+			const absolutePath = join(session.worktreePath, relativePath);
+
+			// Verify the path is within the worktree (prevent path traversal)
+			const normalizedAbsolute = absolutePath.replace(/\\/g, '/');
+			const normalizedWorktree = session.worktreePath.replace(/\\/g, '/');
+			if (!normalizedAbsolute.startsWith(normalizedWorktree)) {
+				return { success: false, error: 'Invalid path: outside worktree' };
+			}
+
+			// Check if path exists
+			if (!existsSync(absolutePath)) {
+				return { success: false, error: 'File or directory does not exist' };
+			}
+
+			// Delete the file or directory
+			const stats = statSync(absolutePath);
+			if (stats.isDirectory()) {
+				rmSync(absolutePath, { recursive: true, force: true });
+				console.log(`Deleted directory: ${relativePath}`);
+			} else {
+				rmSync(absolutePath, { force: true });
+				console.log(`Deleted file: ${relativePath}`);
+			}
+
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Delete failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
+	}
+
+	/**
+	 * Creates a file or directory in a session's worktree.
+	 * @param sessionId - Session identifier
+	 * @param relativePath - Path relative to worktree root
+	 * @param isDirectory - Whether to create a directory (true) or file (false)
+	 * @returns Success status and optional error message
+	 */
+	createFileOrDirectory(sessionId: string, relativePath: string, isDirectory: boolean): { success: boolean; error?: string } {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			return { success: false, error: `Session ${sessionId} not found` };
+		}
+
+		try {
+			// Construct absolute path
+			const absolutePath = join(session.worktreePath, relativePath);
+
+			// Verify the path is within the worktree (prevent path traversal)
+			const normalizedAbsolute = absolutePath.replace(/\\/g, '/');
+			const normalizedWorktree = session.worktreePath.replace(/\\/g, '/');
+			if (!normalizedAbsolute.startsWith(normalizedWorktree)) {
+				return { success: false, error: 'Invalid path: outside worktree' };
+			}
+
+			// Check if path already exists
+			if (existsSync(absolutePath)) {
+				return { success: false, error: 'File or directory already exists' };
+			}
+
+			// Create the file or directory
+			if (isDirectory) {
+				mkdirSync(absolutePath, { recursive: true });
+				console.log(`Created directory: ${relativePath}`);
+			} else {
+				// Ensure parent directory exists
+				const parentDir = dirname(absolutePath);
+				if (!existsSync(parentDir)) {
+					mkdirSync(parentDir, { recursive: true });
+				}
+				// Create empty file
+				writeFileSync(absolutePath, '', 'utf8');
+				console.log(`Created file: ${relativePath}`);
+			}
+
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Create failed for session ${sessionId}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
 	}
 
 	/**
@@ -1365,4 +1510,5 @@ export type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'uncha
 export interface FileInfo {
 	path: string;
 	status: FileStatus;
+	isDirectory?: boolean;
 }

@@ -2,12 +2,14 @@
 	import type { CommitInfo } from '$lib/stores/terminals';
 	import FileTree from './FileTree.svelte';
 	import type { FileInfo } from '$lib/server/session-manager';
+	import type { GitBackend } from '$lib/GitBackend';
 
 	export let commits: CommitInfo[] | null;
 	export let active: boolean = false;
 	export let files: FileInfo[] | null = null;
 	export let onCommitSelect: (commitId: string | null) => void;
 	export let width: number = 350;
+	export let gitBackend: GitBackend | null = null;
 
 	// Track selected commit (null = working tree)
 	let selectedCommitId: string | null = null;
@@ -127,7 +129,7 @@
 	</div>
 
 	<div class="file-tree-section">
-		<FileTree {files} {active} />
+		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} />
 	</div>
 </div>
 

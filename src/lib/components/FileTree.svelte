@@ -1,16 +1,34 @@
 <script lang="ts">
+	import DeleteConfirmationDialog from './DeleteConfirmationDialog.svelte';
+	import CreateFileDialog from './CreateFileDialog.svelte';
+	import type { GitBackend } from '$lib/GitBackend';
+
 	export let files: FileInfo[] | null;
 	export let active: boolean = false;
+	export let isWorktree: boolean = false;
+	export let gitBackend: GitBackend | null = null;
 
 	type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged' | 'ignored';
 
 	interface FileInfo {
 		path: string;
 		status: FileStatus;
+		isDirectory?: boolean;
 	}
 
 	type FilterMode = 'modified' | 'all' | 'all+ignored';
 	let filterMode: FilterMode = 'modified';
+
+	// Dialog state
+	let showDeleteDialog = false;
+	let showCreateDialog = false;
+	let deleteTargetPath = '';
+	let deleteTargetIsDirectory = false;
+	let createParentPath = '';
+	let createErrorMessage = '';
+
+	// Hover state
+	let hoveredPath: string | null = null;
 
 	interface TreeNode {
 		name: string;
@@ -49,6 +67,50 @@
 			// Skip files with empty paths
 			if (!file.path || !file.path.trim()) continue;
 
+			// If this is explicitly marked as a directory, handle it specially
+			if (file.isDirectory) {
+				const parts = file.path.split('/').filter(part => part.length > 0);
+				if (parts.length === 0) continue;
+
+				let currentPath = '';
+				for (let i = 0; i < parts.length; i++) {
+					const part = parts[i];
+					const parentPath = currentPath;
+					currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+					if (!nodeMap.has(currentPath)) {
+						const node: TreeNode = {
+							name: part,
+							path: currentPath,
+							isDirectory: true,
+							status: i === parts.length - 1 ? file.status : 'unchanged',
+							children: []
+						};
+
+						nodeMap.set(currentPath, node);
+
+						if (parentPath) {
+							const parent = nodeMap.get(parentPath);
+							if (parent) {
+								parent.children.push(node);
+							}
+						} else {
+							root.push(node);
+						}
+					} else {
+						// Update existing directory node status if needed
+						const existingNode = nodeMap.get(currentPath);
+						if (existingNode && i === parts.length - 1 && file.status !== 'unchanged') {
+							if (existingNode.status === 'unchanged') {
+								existingNode.status = file.status;
+							}
+						}
+					}
+				}
+				continue;
+			}
+
+			// Handle regular files
 			const parts = file.path.split('/').filter(part => part.length > 0);
 
 			// Skip if no valid path parts (e.g., path was just slashes)
@@ -138,7 +200,19 @@
 			.map(node => {
 				if (node.isDirectory) {
 					const filteredChildren = filterTree(node.children, mode);
-					if (filteredChildren.length > 0 || hasModifiedFiles(node)) {
+
+					// Check if directory itself should be visible based on its status
+					let dirShouldBeVisible = false;
+					if (mode === 'all') {
+						// Show all directories except ignored
+						dirShouldBeVisible = node.status !== 'ignored';
+					} else {
+						// mode === 'modified': Show only modified directories (exclude unchanged and ignored)
+						dirShouldBeVisible = (node.status !== 'unchanged' && node.status !== 'ignored');
+					}
+
+					// Show directory if it has visible children OR if the directory itself should be visible
+					if (filteredChildren.length > 0 || dirShouldBeVisible) {
 						return { ...node, children: filteredChildren };
 					}
 					return null;
@@ -179,16 +253,113 @@
 	/**
 	 * Render tree recursively
 	 */
-	function renderTree(nodes: TreeNode[], depth: number = 0): { node: TreeNode; depth: number }[] {
-		const result: { node: TreeNode; depth: number }[] = [];
+	function renderTree(nodes: TreeNode[], depth: number = 0, parentPath: string = ''): Array<{ node: TreeNode; depth: number; isAddEntry?: boolean; addParentPath?: string }> {
+		const result: Array<{ node: TreeNode; depth: number; isAddEntry?: boolean; addParentPath?: string }> = [];
 		for (const node of nodes) {
 			result.push({ node, depth });
 			// Only render children if directory is expanded
 			if (node.isDirectory && node.children.length > 0 && isExpanded(node.path)) {
-				result.push(...renderTree(node.children, depth + 1));
+				result.push(...renderTree(node.children, depth + 1, node.path));
+			}
+			// Add "+ (add entry)" item after each directory (if worktree and expanded)
+			if (isWorktree && node.isDirectory && isExpanded(node.path)) {
+				result.push({
+					node: { name: '', path: '', isDirectory: false, status: 'unchanged', children: [] },
+					depth: depth + 1,
+					isAddEntry: true,
+					addParentPath: node.path
+				});
 			}
 		}
+		// Add "+ (add entry)" item at root level
+		if (depth === 0 && isWorktree) {
+			result.push({
+				node: { name: '', path: '', isDirectory: false, status: 'unchanged', children: [] },
+				depth: 0,
+				isAddEntry: true,
+				addParentPath: ''
+			});
+		}
 		return result;
+	}
+
+	/**
+	 * Handle delete button click
+	 */
+	function handleDeleteClick(node: TreeNode) {
+		deleteTargetPath = node.path;
+		deleteTargetIsDirectory = node.isDirectory;
+		showDeleteDialog = true;
+	}
+
+	/**
+	 * Handle delete confirmation
+	 */
+	async function handleDeleteConfirm() {
+		if (!gitBackend) return;
+
+		try {
+			const result = await gitBackend.deleteFile(deleteTargetPath);
+			if (!result.success) {
+				alert(`Failed to delete: ${result.error}`);
+			}
+		} catch (error: any) {
+			alert(`Failed to delete: ${error.message}`);
+		}
+
+		showDeleteDialog = false;
+		deleteTargetPath = '';
+	}
+
+	/**
+	 * Handle delete cancel
+	 */
+	function handleDeleteCancel() {
+		showDeleteDialog = false;
+		deleteTargetPath = '';
+	}
+
+	/**
+	 * Handle add entry click
+	 */
+	function handleAddClick(parentPath: string) {
+		createParentPath = parentPath;
+		createErrorMessage = '';
+		showCreateDialog = true;
+	}
+
+	/**
+	 * Handle create confirmation
+	 */
+	async function handleCreateSubmit(event: CustomEvent<{ fileName: string; isDirectory: boolean }>) {
+		if (!gitBackend) return;
+
+		const { fileName, isDirectory } = event.detail;
+		const fullPath = createParentPath ? `${createParentPath}/${fileName}` : fileName;
+
+		try {
+			const result = await gitBackend.createFile(fullPath, isDirectory);
+			if (!result.success) {
+				createErrorMessage = result.error || 'Failed to create file';
+				return;
+			}
+
+			// Success - close dialog
+			showCreateDialog = false;
+			createParentPath = '';
+			createErrorMessage = '';
+		} catch (error: any) {
+			createErrorMessage = error.message || 'Failed to create file';
+		}
+	}
+
+	/**
+	 * Handle create cancel
+	 */
+	function handleCreateCancel() {
+		showCreateDialog = false;
+		createParentPath = '';
+		createErrorMessage = '';
 	}
 
 	$: tree = files ? buildTree(files) : [];
@@ -199,20 +370,48 @@
 <div class="file-tree" class:hidden={!active}>
 	<div class="file-list">
 		{#if flatTree.length > 0}
-			{#each flatTree as { node, depth }}
-				<div
-					class="file-row {getStatusColor(node.status)}"
-					class:directory={node.isDirectory}
-					style="padding-left: {depth * 16 + 8}px"
-					on:click={() => node.isDirectory && toggleDirectory(node.path)}
-				>
-					{#if node.isDirectory}
-						<span class="arrow" class:expanded={isExpanded(node.path)}>▶</span>
-					{:else}
+			{#each flatTree as item}
+				{#if item.isAddEntry}
+					<!-- Add entry button -->
+					<div
+						class="file-row add-entry"
+						style="padding-left: {item.depth * 16 + 8}px"
+						on:click={() => handleAddClick(item.addParentPath || '')}
+						role="button"
+						tabindex="0"
+					>
 						<span class="arrow-spacer"></span>
-					{/if}
-					<span class="file-name">{node.name}</span>
-				</div>
+						<span class="add-entry-text">+ (add entry)</span>
+					</div>
+				{:else}
+					<!-- Regular file/directory row -->
+					<div
+						class="file-row {getStatusColor(item.node.status)}"
+						class:directory={item.node.isDirectory}
+						style="padding-left: {item.depth * 16 + 8}px"
+						on:click={() => item.node.isDirectory && toggleDirectory(item.node.path)}
+						on:mouseenter={() => hoveredPath = item.node.path}
+						on:mouseleave={() => hoveredPath = null}
+						role="button"
+						tabindex="0"
+					>
+						{#if item.node.isDirectory}
+							<span class="arrow" class:expanded={isExpanded(item.node.path)}>▶</span>
+						{:else}
+							<span class="arrow-spacer"></span>
+						{/if}
+						<span class="file-name">{item.node.name}</span>
+						{#if isWorktree && hoveredPath === item.node.path}
+							<button
+								class="delete-button"
+								on:click|stopPropagation={() => handleDeleteClick(item.node)}
+								title="Delete"
+							>
+								🗑️
+							</button>
+						{/if}
+					</div>
+				{/if}
 			{/each}
 		{:else}
 			<div class="empty-message">No files to display</div>
@@ -240,6 +439,23 @@
 		</button>
 	</div>
 </div>
+
+<!-- Dialogs -->
+<DeleteConfirmationDialog
+	bind:show={showDeleteDialog}
+	path={deleteTargetPath}
+	isDirectory={deleteTargetIsDirectory}
+	on:confirm={handleDeleteConfirm}
+	on:cancel={handleDeleteCancel}
+/>
+
+<CreateFileDialog
+	bind:show={showCreateDialog}
+	parentPath={createParentPath}
+	bind:errorMessage={createErrorMessage}
+	on:submit={handleCreateSubmit}
+	on:cancel={handleCreateCancel}
+/>
 
 <style>
 	.file-tree {
@@ -272,6 +488,7 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		position: relative;
 	}
 
 	.file-row.directory {
@@ -280,6 +497,37 @@
 
 	.file-row:hover {
 		background-color: #2a2a2a;
+	}
+
+	.file-row.add-entry {
+		color: #888888;
+		cursor: pointer;
+		font-style: italic;
+	}
+
+	.file-row.add-entry:hover {
+		color: #0dbc79;
+		background-color: #2a2a2a;
+	}
+
+	.add-entry-text {
+		user-select: none;
+	}
+
+	.delete-button {
+		margin-left: auto;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0 4px;
+		font-size: 14px;
+		opacity: 0.7;
+		transition: opacity 0.2s;
+		flex-shrink: 0;
+	}
+
+	.delete-button:hover {
+		opacity: 1;
 	}
 
 	.arrow {
