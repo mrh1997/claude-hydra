@@ -2,7 +2,7 @@
 	export let files: FileInfo[] | null;
 	export let active: boolean = false;
 
-	type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged';
+	type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged' | 'ignored';
 
 	interface FileInfo {
 		path: string;
@@ -128,12 +128,12 @@
 	 * Filter tree based on current filter mode
 	 */
 	function filterTree(nodes: TreeNode[], mode: FilterMode): TreeNode[] {
-		if (mode === 'all' || mode === 'all+ignored') {
-			// For now, treat both the same (we'll add ignored files support later)
+		if (mode === 'all+ignored') {
+			// Show all files including ignored
 			return nodes;
 		}
 
-		// Modified only: filter out unchanged files and empty directories
+		// Filter based on mode
 		return nodes
 			.map(node => {
 				if (node.isDirectory) {
@@ -143,7 +143,14 @@
 					}
 					return null;
 				} else {
-					return node.status !== 'unchanged' ? node : null;
+					// File filtering logic
+					if (mode === 'all') {
+						// Show all files except ignored
+						return node.status !== 'ignored' ? node : null;
+					} else {
+						// mode === 'modified': Show only modified files (exclude unchanged and ignored)
+						return (node.status !== 'unchanged' && node.status !== 'ignored') ? node : null;
+					}
 				}
 			})
 			.filter((node): node is TreeNode => node !== null);
@@ -162,6 +169,8 @@
 				return 'status-deleted';
 			case 'untracked':
 				return 'status-untracked';
+			case 'ignored':
+				return 'status-ignored';
 			default:
 				return '';
 		}
@@ -312,6 +321,10 @@
 
 	.status-untracked {
 		color: #0dbc79; /* Green for untracked (same as added) */
+	}
+
+	.status-ignored {
+		color: #808080; /* Gray for ignored files */
 	}
 
 	.empty-message {

@@ -726,7 +726,7 @@ export class SessionManager {
 		});
 
 		// Get untracked files individually (not collapsed as directories)
-		const untrackedOutput = execSync('git ls-files --others --exclude-standard', {
+		const untrackedOutput = execSync('git ls-files --others', {
 			cwd: session.worktreePath,
 			encoding: 'utf8',
 			stdio: 'pipe'
@@ -787,7 +787,30 @@ export class SessionManager {
 			}
 		}
 
-		// Add untracked files (now properly expanded)
+		// Get ignored files
+		const ignoredOutput = execSync('git status --ignored --porcelain', {
+			cwd: session.worktreePath,
+			encoding: 'utf8',
+			stdio: 'pipe'
+		}).trim();
+
+		// Parse ignored files from status output
+		// Lines starting with "!! " are ignored files
+		const ignoredFiles = new Set<string>();
+		if (ignoredOutput) {
+			for (const line of ignoredOutput.split('\n')) {
+				if (line.startsWith('!! ')) {
+					let path = line.substring(3).trim();
+					// Normalize path separators to forward slashes
+					path = path.replace(/\\/g, '/');
+					if (path) {
+						ignoredFiles.add(path);
+					}
+				}
+			}
+		}
+
+		// Add untracked files (now includes both untracked and ignored)
 		if (untrackedOutput) {
 			for (let path of untrackedOutput.split('\n')) {
 				path = path.trim();
@@ -797,7 +820,9 @@ export class SessionManager {
 				// Normalize path separators to forward slashes
 				path = path.replace(/\\/g, '/');
 
-				files.push({ path, status: 'untracked' });
+				// Determine if this file is ignored or just untracked
+				const status: FileStatus = ignoredFiles.has(path) ? 'ignored' : 'untracked';
+				files.push({ path, status });
 			}
 		}
 
@@ -1335,7 +1360,7 @@ export interface MergeResult {
 	conflictsResolved?: boolean;
 }
 
-export type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged';
+export type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked' | 'unchanged' | 'ignored';
 
 export interface FileInfo {
 	path: string;
