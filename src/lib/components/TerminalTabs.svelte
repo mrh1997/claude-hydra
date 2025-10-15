@@ -567,7 +567,7 @@
 
 	.tab.active {
 		background-color: #1e1e1e;
-		border-right: 2px solid #007acc;
+		border-left: 2px solid #007acc;
 	}
 
 	.state-indicator {
