@@ -393,6 +393,11 @@
 	function selectTab(id: string) {
 		terminals.setActiveTab(id);
 	}
+
+	// Sort tabs alphabetically by title
+	$: sortedTerminals = [...$terminals].sort((a, b) =>
+		a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+	);
 </script>
 
 <BranchNameDialog
@@ -436,7 +441,7 @@
 
 <div class="tabs-container">
 	<div class="tabs">
-		{#each $terminals as tab (tab.id)}
+		{#each sortedTerminals as tab (tab.id)}
 			<div
 				class="tab"
 				class:active={tab.active}
