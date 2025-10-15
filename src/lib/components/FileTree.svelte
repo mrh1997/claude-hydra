@@ -20,6 +20,24 @@
 		children: TreeNode[];
 	}
 
+	// Track which directories are expanded (default is collapsed)
+	let expandedDirs = new Map<string, boolean>();
+
+	/**
+	 * Toggle directory expanded state
+	 */
+	function toggleDirectory(path: string) {
+		expandedDirs.set(path, !expandedDirs.get(path));
+		expandedDirs = expandedDirs; // Trigger reactivity
+	}
+
+	/**
+	 * Check if directory is expanded
+	 */
+	function isExpanded(path: string): boolean {
+		return expandedDirs.get(path) || false;
+	}
+
 	/**
 	 * Build a tree structure from flat file list
 	 */
@@ -156,7 +174,8 @@
 		const result: { node: TreeNode; depth: number }[] = [];
 		for (const node of nodes) {
 			result.push({ node, depth });
-			if (node.isDirectory && node.children.length > 0) {
+			// Only render children if directory is expanded
+			if (node.isDirectory && node.children.length > 0 && isExpanded(node.path)) {
 				result.push(...renderTree(node.children, depth + 1));
 			}
 		}
@@ -165,7 +184,7 @@
 
 	$: tree = files ? buildTree(files) : [];
 	$: filteredTree = filterTree(tree, filterMode);
-	$: flatTree = renderTree(filteredTree);
+	$: flatTree = (expandedDirs, renderTree(filteredTree));
 </script>
 
 <div class="file-tree" class:hidden={!active}>
@@ -174,9 +193,15 @@
 			{#each flatTree as { node, depth }}
 				<div
 					class="file-row {getStatusColor(node.status)}"
+					class:directory={node.isDirectory}
 					style="padding-left: {depth * 16 + 8}px"
+					on:click={() => node.isDirectory && toggleDirectory(node.path)}
 				>
-					<span class="file-icon">{node.isDirectory ? '📁' : '📄'}</span>
+					{#if node.isDirectory}
+						<span class="arrow" class:expanded={isExpanded(node.path)}>▶</span>
+					{:else}
+						<span class="arrow-spacer"></span>
+					{/if}
 					<span class="file-name">{node.name}</span>
 				</div>
 			{/each}
@@ -240,13 +265,31 @@
 		text-overflow: ellipsis;
 	}
 
+	.file-row.directory {
+		cursor: pointer;
+	}
+
 	.file-row:hover {
 		background-color: #2a2a2a;
 	}
 
-	.file-icon {
-		margin-right: 6px;
+	.arrow {
+		display: inline-block;
+		width: 14px;
+		margin-right: 4px;
 		font-size: 10px;
+		transition: transform 0.2s ease;
+		transform-origin: center;
+	}
+
+	.arrow.expanded {
+		transform: rotate(90deg);
+	}
+
+	.arrow-spacer {
+		display: inline-block;
+		width: 14px;
+		margin-right: 4px;
 	}
 
 	.file-name {
