@@ -32,6 +32,7 @@
 	let diffOriginalContent = '';
 	let diffModifiedContent = '';
 	let diffLanguage = 'plaintext';
+	let diffCommitId: string | null = null;
 
 	onMount(async () => {
 		// Dynamic imports to avoid SSR issues
@@ -291,6 +292,7 @@
 		// Request file diff from backend
 		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
 			diffFileName = path;
+			diffCommitId = commitId;
 			ws.send(JSON.stringify({
 				type: 'getFileDiff',
 				sessionId,
@@ -300,11 +302,37 @@
 		}
 	}
 
+	function handleSaveFile(event: CustomEvent<{ content: string }>) {
+		const { content } = event.detail;
+
+		// Send save file request to backend
+		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+			ws.send(JSON.stringify({
+				type: 'saveFile',
+				sessionId,
+				filePath: diffFileName,
+				content: content
+			}));
+		}
+	}
+
+	function handleDiscardFile() {
+		// Send discard file request to backend
+		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+			ws.send(JSON.stringify({
+				type: 'discardFile',
+				sessionId,
+				filePath: diffFileName
+			}));
+		}
+	}
+
 	function handleCloseDiff() {
 		showDiffViewer = false;
 		diffFileName = '';
 		diffOriginalContent = '';
 		diffModifiedContent = '';
+		diffCommitId = null;
 	}
 
 	function getLanguageFromFileName(fileName: string): string {
@@ -349,7 +377,10 @@
 		language={diffLanguage}
 		active={showDiffViewer}
 		width={commitListWidth}
+		commitId={diffCommitId}
 		on:close={handleCloseDiff}
+		on:save={handleSaveFile}
+		on:discard={handleDiscardFile}
 	/>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
 	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} />

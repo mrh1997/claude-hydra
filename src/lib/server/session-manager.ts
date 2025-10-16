@@ -1070,7 +1070,7 @@ export class SessionManager {
 
 				// Get file content from working directory
 				try {
-					modified = readFileSync(join(session.worktreePath, filePath), 'utf8');
+				modified = readFileSync(join(session.worktreePath, filePath), 'utf8');
 				} catch (error) {
 					// File might be deleted, so modified is empty
 					modified = '';
@@ -1106,6 +1106,65 @@ export class SessionManager {
 		} catch (error: any) {
 			console.error(`Error getting file diff for session ${sessionId}:`, error);
 			throw new Error(`Failed to get file diff: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Saves content to a file in the session's worktree.
+	 * @param sessionId - Session identifier
+	 * @param filePath - Path to the file relative to worktree
+	 * @param content - New file content
+	 * @throws Error if session not found or save fails
+	 */
+	saveFile(sessionId: string, filePath: string, content: string): void {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new Error(`Session ${sessionId} not found`);
+		}
+
+		try {
+			const fullPath = join(session.worktreePath, filePath);
+
+			writeFileSync(fullPath, content, 'utf8');
+			console.log(`Saved file: ${filePath} in session ${sessionId}`);
+		} catch (error: any) {
+			console.error(`Error saving file ${filePath} in session ${sessionId}:`, error);
+			throw new Error(`Failed to save file: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Discards changes to a specific file by restoring it to the git branch state.
+	 * @param sessionId - Session identifier
+	 * @param filePath - Path to the file relative to worktree
+	 * @throws Error if session not found or discard fails
+	 */
+	discardFile(sessionId: string, filePath: string): void {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new Error(`Session ${sessionId} not found`);
+		}
+
+		try {
+			// Use git restore to discard changes (modern git)
+			// This works for both tracked files and staged changes
+			try {
+				execSync(`git restore "${filePath}"`, {
+					cwd: session.worktreePath,
+					stdio: 'pipe'
+				});
+				console.log(`Discarded changes to file: ${filePath} in session ${sessionId}`);
+			} catch (restoreError) {
+				// Fallback to git checkout for older git versions
+				execSync(`git checkout -- "${filePath}"`, {
+					cwd: session.worktreePath,
+					stdio: 'pipe'
+				});
+				console.log(`Discarded changes to file: ${filePath} in session ${sessionId} (using checkout)`);
+			}
+		} catch (error: any) {
+			console.error(`Error discarding file ${filePath} in session ${sessionId}:`, error);
+			throw new Error(`Failed to discard file: ${error.message}`);
 		}
 	}
 

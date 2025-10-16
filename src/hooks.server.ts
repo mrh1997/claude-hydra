@@ -438,6 +438,68 @@ function initWebSocketServer() {
 						}
 						break;
 
+					case 'saveFile':
+						// Save file content to disk
+						const saveSessionId = data.sessionId || sessionId;
+						if (saveSessionId) {
+							try {
+								sessionManager.saveFile(saveSessionId, data.filePath, data.content);
+								ws.send(JSON.stringify({ type: 'fileSaved', success: true }));
+
+								// Refresh git status after save
+								try {
+									const gitStatus = sessionManager.getGitStatus(saveSessionId);
+									const commitLog = sessionManager.getCommitLog(saveSessionId);
+									const targetBranch = ptyManager.getBranchName(saveSessionId);
+									if (targetBranch) {
+										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+									}
+								} catch (error) {
+									console.error('Failed to send git status after save:', error);
+								}
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to save file:', errorMessage);
+								ws.send(JSON.stringify({ type: 'fileSaved', success: false, error: errorMessage }));
+							}
+						}
+						break;
+
+					case 'discardFile':
+						// Discard changes to a specific file
+						const discardFileSessionId = data.sessionId || sessionId;
+						if (discardFileSessionId) {
+							try {
+								sessionManager.discardFile(discardFileSessionId, data.filePath);
+								ws.send(JSON.stringify({ type: 'fileDiscarded', success: true }));
+
+								// Refresh git status and file diff after discard
+								try {
+									const gitStatus = sessionManager.getGitStatus(discardFileSessionId);
+									const commitLog = sessionManager.getCommitLog(discardFileSessionId);
+									const targetBranch = ptyManager.getBranchName(discardFileSessionId);
+									if (targetBranch) {
+										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+									}
+
+									// Send updated file diff
+									const diff = sessionManager.getFileDiff(discardFileSessionId, data.filePath, null);
+									ws.send(JSON.stringify({
+										type: 'fileDiff',
+										original: diff.original,
+										modified: diff.modified
+									}));
+								} catch (error) {
+									console.error('Failed to send git status after discard:', error);
+								}
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to discard file:', errorMessage);
+								ws.send(JSON.stringify({ type: 'fileDiscarded', success: false, error: errorMessage }));
+							}
+						}
+						break;
+
 					case 'destroy':
 						// Destroy terminal session
 						if (sessionId) {
