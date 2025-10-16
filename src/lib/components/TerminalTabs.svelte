@@ -241,6 +241,13 @@
 	async function handleCommitBadgeClick(tab: any, event: MouseEvent) {
 		event.stopPropagation();
 		if (!tab.sessionId) return;
+
+		// If tab is not active, just switch to it
+		if (!tab.active) {
+			selectTab(tab.id);
+			return;
+		}
+
 		// Show commit message dialog
 		pendingCloseTabId = tab.id;
 		showCommitDialog = true;
@@ -249,6 +256,12 @@
 	async function handleDiscardClick(tab: any, event: MouseEvent) {
 		event.stopPropagation();
 		if (!tab.sessionId) return;
+
+		// If tab is not active, just switch to it
+		if (!tab.active) {
+			selectTab(tab.id);
+			return;
+		}
 
 		// Show confirmation dialog
 		pendingDiscardTab = tab;
@@ -259,6 +272,12 @@
 	async function handleMergeBadgeClick(tab: any, event: MouseEvent) {
 		event.stopPropagation();
 		if (!tab.sessionId) return;
+
+		// If tab is not active, just switch to it
+		if (!tab.active) {
+			selectTab(tab.id);
+			return;
+		}
 
 		// Check if operation already in progress
 		if (operationInProgress.has(tab.id)) return;
@@ -301,6 +320,12 @@
 		event.stopPropagation();
 		if (!tab.sessionId) return;
 
+		// If tab is not active, just switch to it
+		if (!tab.active) {
+			selectTab(tab.id);
+			return;
+		}
+
 		// Show confirmation dialog
 		pendingDiscardTab = tab;
 		isDiscardingCommits = true;
@@ -310,6 +335,12 @@
 	async function handleRebaseBadgeClick(tab: any, event: MouseEvent) {
 		event.stopPropagation();
 		if (!tab.sessionId) return;
+
+		// If tab is not active, just switch to it
+		if (!tab.active) {
+			selectTab(tab.id);
+			return;
+		}
 
 		// Check if operation already in progress
 		if (operationInProgress.has(tab.id)) return;
