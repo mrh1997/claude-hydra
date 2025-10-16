@@ -56,6 +56,11 @@ if (specifiedDir) {
 	// Store in environment variable for SessionManager and other components
 	process.env.CLAUDE_HYDRA_REPO_DIR = targetDir;
 	console.log(`[claude-hydra] Using repository directory: ${targetDir}`);
+} else {
+	// When --dir is not specified, use current working directory as project directory
+	// This ensures autoinit scripts are loaded from the project directory, not claude-hydra's installation directory
+	process.env.CLAUDE_HYDRA_REPO_DIR = process.cwd();
+	console.log(`[claude-hydra] Using current directory: ${process.cwd()}`);
 }
 
 // Detect mode: --dev flag or check if build directory exists
