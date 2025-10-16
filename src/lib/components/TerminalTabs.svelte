@@ -655,9 +655,9 @@
 		display: flex;
 		align-items: center;
 		gap: 2px;
-		padding: 2px 6px;
+		padding: 1.6px 6px;
 		font-size: 10px;
-		border-radius: 3px;
+		border-radius: 5px;
 		cursor: pointer;
 		transition: opacity 0.2s;
 	}
@@ -687,18 +687,18 @@
 
 	.commit-badge {
 		background-color: transparent;
-		border: 2px dotted #e5e510;
-		color: #e5e510;
+		border: 1px solid #5cacf5;
+		color: #5cacf5;
 	}
 
 	.merge-badge {
-		background-color: #e5e510;
+		background-color: #5cacf5;
 		color: #1e1e1e;
 	}
 
 	.rebase-badge {
-		background-color: #ff8c00;
-		color: #1e1e1e;
+		background-color: #0066cc;
+		color: #ffffff;
 	}
 
 	.new-tab-btn {
