@@ -168,12 +168,21 @@
 	function handleDiscard() {
 		if (!diffEditor) return;
 
-		// Reset dirty flag immediately so reactive statement can update when backend sends new diff
+		// Get the original content (git HEAD state)
+		const originalEditor = diffEditor.getOriginalEditor();
+		const originalContent = originalEditor?.getValue() || '';
+
+		// Set the modified editor's content to match the original
+		const modifiedEditor = diffEditor.getModifiedEditor();
+		if (modifiedEditor) {
+			modifiedEditor.setValue(originalContent);
+		}
+
+		// Reset dirty flag
 		isDirty = false;
 
-		// Dispatch discard event to backend to revert file on disk (runs git restore)
-		// Backend will send back updated diff with modified content matching original
-		dispatch('discard');
+		// Save the original content to disk (restores file to HEAD state)
+		dispatch('save', { content: originalContent });
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
