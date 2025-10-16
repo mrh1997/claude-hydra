@@ -33,6 +33,7 @@
 	let diffModifiedContent = '';
 	let diffLanguage = 'plaintext';
 	let diffCommitId: string | null = null;
+	let requestedDiffFile = ''; // Track requested file until response arrives
 
 	onMount(async () => {
 		// Dynamic imports to avoid SSR issues
@@ -217,7 +218,8 @@
 						break;
 
 					case 'fileDiff':
-						// Handle file diff response
+						// Handle file diff response - set all props atomically
+						diffFileName = requestedDiffFile;
 						diffOriginalContent = message.original || '';
 						diffModifiedContent = message.modified || '';
 						diffLanguage = getLanguageFromFileName(diffFileName);
@@ -291,7 +293,7 @@
 
 		// Request file diff from backend
 		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
-			diffFileName = path;
+			requestedDiffFile = path; // Store requested file, don't set diffFileName yet
 			diffCommitId = commitId;
 			ws.send(JSON.stringify({
 				type: 'getFileDiff',

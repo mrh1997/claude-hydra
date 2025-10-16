@@ -11,13 +11,26 @@
 
 	const dispatch = createEventDispatcher();
 
+	/**
+	 * Detects the line ending style from file content.
+	 * @param content - File content to analyze
+	 * @returns 'crlf' if Windows line endings detected, 'lf' otherwise
+	 */
+	function detectEOL(content: string): 'lf' | 'crlf' {
+		// Check first 8KB sample for performance (works even with very long first lines)
+		const sample = content.substring(0, 8192);
+		return sample.includes('\r\n') ? 'crlf' : 'lf';
+	}
+
 	let containerElement: HTMLDivElement;
 	let diffEditor: any;
-	let isDirty = false; // Track if file has unsaved changes
+	let isDirty = false; // True when Monaco detects differences between original and modified
+	let previousIsDirty = false; // Track previous isDirty state to detect transitions
 	let currentOriginal = ''; // Track current original content to avoid unnecessary re-renders
 	let currentModified = ''; // Track current modified content to avoid unnecessary re-renders
 	let currentModels: { original: any; modified: any } | null = null; // Track current models for disposal
 	let currentFileName = ''; // Track current file name to detect file changes
+	let detectedEOL: 'lf' | 'crlf' = 'lf'; // Detected line ending style from original file
 
 	onMount(async () => {
 		// Dynamic import to avoid SSR issues
@@ -43,16 +56,18 @@
 		// Set the model
 		updateDiffModel();
 
-		// Listen for content changes in the modified editor (only when editable)
+		// Listen for diff computation updates - Monaco will properly handle LF/CRLF comparison
+		diffEditor.onDidUpdateDiff(() => {
+			const changes = diffEditor.getLineChanges();
+			// changes is null if diff not ready, empty array if files identical, array with elements if different
+			if (changes !== null) {
+				isDirty = changes.length > 0;
+			}
+		});
+
+		// Auto-save when Monaco editor loses focus (only when editable)
 		if (isEditable) {
-			// Get the modified editor
 			const modifiedEditor = diffEditor.getModifiedEditor();
-
-			modifiedEditor?.onDidChangeModelContent(() => {
-				isDirty = true;
-			});
-
-			// Auto-save when Monaco editor loses focus
 			modifiedEditor?.onDidBlurEditorText(() => {
 				if (isDirty) {
 					handleSave();
@@ -99,9 +114,9 @@
 		// Check if we're switching to a different file
 		const isNewFile = fileName !== currentFileName;
 
-		// If switching to a new file, reset dirty flag
+		// If switching to a new file, update filename tracker
+		// Don't set isDirty yet - wait until content is actually loaded
 		if (isNewFile) {
-			isDirty = false;
 			currentFileName = fileName;
 		}
 
@@ -118,12 +133,22 @@
 
 		const monaco = await import('monaco-editor');
 
+		// Detect line ending style from modified content (working tree has actual line endings)
+		// Note: originalContent comes from git blob which normalizes to LF
+		detectedEOL = detectEOL(modifiedContent);
+
 		// Store reference to old models for disposal after setting new ones
 		const oldModels = currentModels;
 
 		// Create new models
 		const originalModel = monaco.editor.createModel(originalContent, language);
 		const modifiedModel = monaco.editor.createModel(modifiedContent, language);
+
+		// Set line ending sequence on modified model to match detected EOL
+		const eolSequence = detectedEOL === 'crlf'
+			? monaco.editor.EndOfLineSequence.CRLF
+			: monaco.editor.EndOfLineSequence.LF;
+		modifiedModel.setEOL(eolSequence);
 
 		// Set new models
 		diffEditor.setModel({
@@ -146,8 +171,9 @@
 	}
 
 	function handleClose() {
-		// Auto-save before closing if dirty
-		if (isDirty && commitId === null) {
+		// Always save before closing (when viewing working tree) to ensure file on disk matches editor
+		// This is important even when not dirty (e.g., user manually edited to match HEAD)
+		if (commitId === null) {
 			handleSave();
 		}
 		dispatch('close');
@@ -161,8 +187,8 @@
 		const content = modifiedEditor?.getValue() || '';
 
 		// Dispatch save event with the content
+		// Note: isDirty will update when parent refreshes and updateDiffModel() is called
 		dispatch('save', { content });
-		isDirty = false;
 	}
 
 	function handleDiscard() {
@@ -173,13 +199,11 @@
 		const originalContent = originalEditor?.getValue() || '';
 
 		// Set the modified editor's content to match the original
+		// This triggers onDidUpdateDiff which will set isDirty = false
 		const modifiedEditor = diffEditor.getModifiedEditor();
 		if (modifiedEditor) {
 			modifiedEditor.setValue(originalContent);
 		}
-
-		// Reset dirty flag
-		isDirty = false;
 
 		// Save the original content to disk (restores file to HEAD state)
 		dispatch('save', { content: originalContent });
@@ -214,6 +238,15 @@
 	// Focus handling
 	$: if (active && containerElement) {
 		containerElement.focus();
+	}
+
+	// Auto-save whenever isDirty changes state in either direction (when viewing working tree)
+	$: if (commitId === null && diffEditor) {
+		// If isDirty changed state (either true→false or false→true), save the content
+		if (previousIsDirty !== isDirty) {
+			handleSave();
+			previousIsDirty = isDirty;
+		}
 	}
 </script>
 

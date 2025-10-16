@@ -1057,8 +1057,8 @@ export class SessionManager {
 			if (commitId === null) {
 				// Working tree: compare HEAD vs working directory
 				try {
-					// Get file content from HEAD
-					original = execSync(`git show HEAD:"${filePath}"`, {
+					// Get file content from HEAD (using cat-file to preserve line endings)
+					original = execSync(`git cat-file blob HEAD:${filePath}`, {
 						cwd: session.worktreePath,
 						encoding: 'utf8',
 						stdio: 'pipe'
@@ -1070,7 +1070,8 @@ export class SessionManager {
 
 				// Get file content from working directory
 				try {
-				modified = readFileSync(join(session.worktreePath, filePath), 'utf8');
+					const fullPath = join(session.worktreePath, filePath);
+					modified = readFileSync(fullPath, 'utf8');
 				} catch (error) {
 					// File might be deleted, so modified is empty
 					modified = '';
@@ -1078,8 +1079,8 @@ export class SessionManager {
 			} else {
 				// Specific commit: compare commit^ vs commit
 				try {
-					// Get file content from commit's parent
-					original = execSync(`git show "${commitId}^:${filePath}"`, {
+					// Get file content from commit's parent (using cat-file to preserve line endings)
+					original = execSync(`git cat-file blob ${commitId}^:${filePath}`, {
 						cwd: session.worktreePath,
 						encoding: 'utf8',
 						stdio: 'pipe'
@@ -1090,8 +1091,8 @@ export class SessionManager {
 				}
 
 				try {
-					// Get file content from commit
-					modified = execSync(`git show "${commitId}:${filePath}"`, {
+					// Get file content from commit (using cat-file to preserve line endings)
+					modified = execSync(`git cat-file blob ${commitId}:${filePath}`, {
 						cwd: session.worktreePath,
 						encoding: 'utf8',
 						stdio: 'pipe'
@@ -1124,7 +1125,6 @@ export class SessionManager {
 
 		try {
 			const fullPath = join(session.worktreePath, filePath);
-
 			writeFileSync(fullPath, content, 'utf8');
 			console.log(`Saved file: ${filePath} in session ${sessionId}`);
 		} catch (error: any) {
