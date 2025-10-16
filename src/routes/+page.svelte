@@ -3,6 +3,7 @@
 	import Terminal from '$lib/components/Terminal.svelte';
 	import TerminalTabs from '$lib/components/TerminalTabs.svelte';
 	import PortInUseError from '$lib/components/PortInUseError.svelte';
+	import FaviconManager from '$lib/components/FaviconManager.svelte';
 	import { terminals } from '$lib/stores/terminals';
 
 	export let data;
@@ -183,6 +184,8 @@
 <svelte:head>
 	<title>{pageTitle}</title>
 </svelte:head>
+
+<FaviconManager />
 
 {#if portInUse}
 	<PortInUseError />
