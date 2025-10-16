@@ -375,7 +375,7 @@
 		modifiedContent={diffModifiedContent}
 		fileName={diffFileName}
 		language={diffLanguage}
-		active={showDiffViewer}
+		active={showDiffViewer && active}
 		width={commitListWidth}
 		commitId={diffCommitId}
 		on:close={handleCloseDiff}
