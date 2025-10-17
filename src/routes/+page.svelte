@@ -113,14 +113,19 @@
 			if (matchesShortcut(event, SHORTCUTS.NEXT_TAB)) {
 				event.preventDefault();
 
-				const currentIndex = $terminals.findIndex(t => t.active);
-				if (currentIndex === -1 || $terminals.length === 0) return;
+				// Sort terminals alphabetically to match the UI display order
+				const sortedTerminals = [...$terminals].sort((a, b) =>
+					a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+				);
 
-				// Search for next ready tab, starting from the one below current
+				const currentIndex = sortedTerminals.findIndex(t => t.active);
+				if (currentIndex === -1 || sortedTerminals.length === 0) return;
+
+				// Search for next ready tab, going DOWN the list (forward through sorted array)
 				// If none found below, wrap around and search from top to current
 				const searchOrder = [
-					...$terminals.slice(currentIndex + 1),
-					...$terminals.slice(0, currentIndex + 1)
+					...sortedTerminals.slice(currentIndex + 1),
+					...sortedTerminals.slice(0, currentIndex)
 				];
 
 				const nextReadyTab = searchOrder.find(tab => tab.state === 'ready');
