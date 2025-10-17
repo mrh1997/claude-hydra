@@ -840,6 +840,23 @@ export class SessionManager {
 			}
 		}
 
+		// Helper function to check if a path is within an ignored directory
+		const isPathIgnored = (path: string): boolean => {
+			// Check if the path itself is ignored
+			if (ignoredFiles.has(path)) {
+				return true;
+			}
+			// Check if any parent directory is ignored
+			const parts = path.split('/');
+			for (let i = 1; i < parts.length; i++) {
+				const parentPath = parts.slice(0, i).join('/') + '/';
+				if (ignoredFiles.has(parentPath)) {
+					return true;
+				}
+			}
+			return false;
+		};
+
 		// Add untracked files (now includes both untracked and ignored)
 		if (untrackedOutput) {
 			for (let path of untrackedOutput.split('\n')) {
@@ -851,7 +868,7 @@ export class SessionManager {
 				path = path.replace(/\\/g, '/');
 
 				// Determine if this file is ignored or just untracked
-				const status: FileStatus = ignoredFiles.has(path) ? 'ignored' : 'untracked';
+				const status: FileStatus = isPathIgnored(path) ? 'ignored' : 'untracked';
 				files.push({ path, status });
 			}
 		}
@@ -864,7 +881,7 @@ export class SessionManager {
 		for (const dirPath of allDirectories) {
 			if (!existingPaths.has(dirPath)) {
 				// Check if directory is ignored
-				const isIgnored = ignoredFiles.has(dirPath);
+				const isIgnored = isPathIgnored(dirPath);
 				files.push({
 					path: dirPath,
 					status: isIgnored ? 'ignored' : 'untracked',

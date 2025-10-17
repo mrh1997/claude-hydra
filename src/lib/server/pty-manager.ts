@@ -140,8 +140,7 @@ export class PtyManager {
 		const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
 		const gitExcludePath = join(repoDir, '.git', 'info', 'exclude');
 		const entriesToAdd = [
-			'.claude/settings.local.json',
-			'.claude/hooks/update-state.js',
+			'.claude/',
 			'.claude-hydra.port'
 		];
 

@@ -206,19 +206,18 @@
 				if (node.isDirectory) {
 					const filteredChildren = filterTree(node.children, mode);
 
-					// Check if directory itself should be visible based on its status
-					let dirShouldBeVisible = false;
-					if (mode === 'all') {
-						// Show all directories except ignored
-						dirShouldBeVisible = node.status !== 'ignored';
+					// Show directory based on filter mode
+					if (mode === 'modified') {
+						// In modified mode, only show directories with visible children
+						if (filteredChildren.length > 0) {
+							return { ...node, children: filteredChildren };
+						}
 					} else {
-						// mode === 'modified': Show only modified directories (exclude unchanged and ignored)
-						dirShouldBeVisible = (node.status !== 'unchanged' && node.status !== 'ignored');
-					}
-
-					// Show directory if it has visible children OR if the directory itself should be visible
-					if (filteredChildren.length > 0 || dirShouldBeVisible) {
-						return { ...node, children: filteredChildren };
+						// In all mode, show all directories except ignored (if they have children OR are explicitly visible)
+						const dirShouldBeVisible = node.status !== 'ignored';
+						if (filteredChildren.length > 0 || dirShouldBeVisible) {
+							return { ...node, children: filteredChildren };
+						}
 					}
 					return null;
 				} else {
