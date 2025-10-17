@@ -1,18 +1,27 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let show = false;
 	export let hasUncommittedChanges = false;
 	export let hasUnmergedCommits = false;
 	export let isExit = false;
+	export let focusStack: FocusStack | null = null;
 
 	let primaryButton: HTMLButtonElement;
 	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
 
-	// Focus primary button when dialog is shown
-	$: if (show) {
-		setTimeout(() => primaryButton?.focus(), 0);
+	// Push/pop focus callback when dialog is shown/hidden
+	$: if (show && focusStack && primaryButton) {
+		focusStack.push(() => {
+			if (primaryButton) {
+				primaryButton.focus();
+			}
+		});
+	} else if (!show && focusStack && focusStack.depth > 1) {
+		// Pop when dialog closes
+		focusStack.pop();
 	}
 
 	function handleDiscard() {

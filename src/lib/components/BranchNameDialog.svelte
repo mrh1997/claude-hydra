@@ -1,19 +1,28 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let show = false;
 	export let errorMessage = '';
+	export let focusStack: FocusStack | null = null;
 
 	let branchName = '';
 	let inputElement: HTMLInputElement;
 	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
 
-	// Clear input and focus when dialog is shown
-	$: if (show) {
+	// Clear input and push/pop focus callback when dialog is shown/hidden
+	$: if (show && focusStack && inputElement) {
 		branchName = '';
 		errorMessage = '';
-		setTimeout(() => inputElement?.focus(), 0);
+		focusStack.push(() => {
+			if (inputElement) {
+				inputElement.focus();
+			}
+		});
+	} else if (!show && focusStack && focusStack.depth > 1) {
+		// Pop when dialog closes
+		focusStack.pop();
 	}
 
 	function handleSubmit() {

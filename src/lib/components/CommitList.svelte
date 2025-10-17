@@ -4,6 +4,7 @@
 	import FileTree from './FileTree.svelte';
 	import type { FileInfo } from '$lib/server/session-manager';
 	import type { GitBackend } from '$lib/GitBackend';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let commits: CommitInfo[] | null;
 	export let active: boolean = false;
@@ -11,6 +12,7 @@
 	export let onCommitSelect: (commitId: string | null) => void;
 	export let width: number = 350;
 	export let gitBackend: GitBackend | null = null;
+	export let focusStack: FocusStack | null = null;
 
 	const dispatch = createEventDispatcher();
 
@@ -141,7 +143,7 @@
 	</div>
 
 	<div class="file-tree-section">
-		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} on:fileClick={handleFileClick} />
+		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} {focusStack} on:fileClick={handleFileClick} />
 	</div>
 </div>
 

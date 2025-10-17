@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { FocusStack } from '$lib/FocusStack';
 
 export interface CommitInfo {
 	hash: string;
@@ -23,6 +24,7 @@ export interface TerminalTab {
 	adoptExisting: boolean;
 	gitStatus: GitStatus | null;
 	commitLog: CommitInfo[] | null;
+	focusStack: FocusStack | null;
 }
 
 function createTerminalsStore() {
@@ -35,7 +37,7 @@ function createTerminalsStore() {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
 				// Add new tab (start as 'running' until backend detects prompt)
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'running', adoptExisting, gitStatus: null, commitLog: null }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
 			});
 		},
 		removeTab: (id: string) => {
@@ -53,6 +55,11 @@ function createTerminalsStore() {
 				tabs.forEach(tab => {
 					tab.active = tab.id === id;
 				});
+				// Activate the focus stack of the newly active tab
+				const activeTab = tabs.find(tab => tab.id === id);
+				if (activeTab && activeTab.focusStack) {
+					activeTab.focusStack.activate();
+				}
 				return tabs;
 			});
 		},
@@ -97,6 +104,15 @@ function createTerminalsStore() {
 				const tab = tabs.find(tab => tab.sessionId === sessionId);
 				if (tab) {
 					tab.commitLog = commitLog;
+				}
+				return tabs;
+			});
+		},
+		setFocusStack: (id: string, focusStack: FocusStack) => {
+			update(tabs => {
+				const tab = tabs.find(tab => tab.id === id);
+				if (tab) {
+					tab.focusStack = focusStack;
 				}
 				return tabs;
 			});

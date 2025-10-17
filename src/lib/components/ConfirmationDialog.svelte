@@ -1,19 +1,28 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let show = false;
 	export let title = 'Confirm';
 	export let message = '';
 	export let confirmText = 'Confirm';
 	export let cancelText = 'Cancel';
+	export let focusStack: FocusStack | null = null;
 
 	let confirmButton: HTMLButtonElement;
 	let dialogElement: HTMLDivElement;
 	const dispatch = createEventDispatcher();
 
-	// Focus confirm button when dialog is shown
-	$: if (show) {
-		setTimeout(() => confirmButton?.focus(), 0);
+	// Push/pop focus callback when dialog is shown/hidden
+	$: if (show && focusStack && confirmButton) {
+		focusStack.push(() => {
+			if (confirmButton) {
+				confirmButton.focus();
+			}
+		});
+	} else if (!show && focusStack && focusStack.depth > 1) {
+		// Pop when dialog closes
+		focusStack.pop();
 	}
 
 	function handleConfirm() {

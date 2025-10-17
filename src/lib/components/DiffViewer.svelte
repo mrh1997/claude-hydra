@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let originalContent: string = '';
 	export let modifiedContent: string = '';
@@ -8,6 +9,7 @@
 	export let active: boolean = false;
 	export let width: number = 350; // Width of the file tree panel
 	export let commitId: string | null = null; // null = working tree, string = historical commit
+	export let focusStack: FocusStack;
 
 	const dispatch = createEventDispatcher();
 
@@ -31,6 +33,7 @@
 	let currentModels: { original: any; modified: any } | null = null; // Track current models for disposal
 	let currentFileName = ''; // Track current file name to detect file changes
 	let detectedEOL: 'lf' | 'crlf' = 'lf'; // Detected line ending style from original file
+	let isPushed = false; // Track whether we've pushed to focus stack for current active state
 
 	onMount(async () => {
 		// Dynamic import to avoid SSR issues
@@ -235,9 +238,21 @@
 		}, 0);
 	}
 
-	// Focus handling
-	$: if (active && containerElement) {
-		containerElement.focus();
+	// Push/pop focus callback when active state changes
+	$: if (active && containerElement && focusStack && !isPushed) {
+		// Push focus callback when diff viewer becomes active (exactly once per activation)
+		focusStack.push(() => {
+			if (containerElement) {
+				containerElement.focus();
+			}
+		});
+		isPushed = true;
+	} else if (!active && isPushed) {
+		// Pop focus callback when diff viewer becomes inactive (exactly once per deactivation)
+		if (focusStack && focusStack.depth > 1) {
+			focusStack.pop();
+		}
+		isPushed = false;
 	}
 
 	// Auto-save whenever isDirty changes state in either direction (when viewing working tree)
@@ -260,7 +275,7 @@
 			<button class="discard-button" on:click={handleDiscard} title="Discard changes">Discard</button>
 		{/if}
 	</div>
-	<div bind:this={containerElement} class="diff-container"></div>
+	<div bind:this={containerElement} class="diff-container" tabindex="-1"></div>
 </div>
 
 <style>

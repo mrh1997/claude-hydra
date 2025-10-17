@@ -3,11 +3,13 @@
 	import DeleteConfirmationDialog from './DeleteConfirmationDialog.svelte';
 	import CreateFileDialog from './CreateFileDialog.svelte';
 	import type { GitBackend } from '$lib/GitBackend';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let files: FileInfo[] | null;
 	export let active: boolean = false;
 	export let isWorktree: boolean = false;
 	export let gitBackend: GitBackend | null = null;
+	export let focusStack: FocusStack | null = null;
 
 	const dispatch = createEventDispatcher();
 
@@ -469,6 +471,7 @@
 	bind:show={showDeleteDialog}
 	path={deleteTargetPath}
 	isDirectory={deleteTargetIsDirectory}
+	focusStack={focusStack}
 	on:confirm={handleDeleteConfirm}
 	on:cancel={handleDeleteCancel}
 />
@@ -477,6 +480,7 @@
 	bind:show={showCreateDialog}
 	parentPath={createParentPath}
 	bind:errorMessage={createErrorMessage}
+	focusStack={focusStack}
 	on:submit={handleCreateSubmit}
 	on:cancel={handleCreateCancel}
 />

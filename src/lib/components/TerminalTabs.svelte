@@ -41,7 +41,8 @@
 	let mergingTabIds = new Set<string>(); // Track tabs currently being merged
 	let operationInProgress = new Set<string>(); // Track tabs with operations in progress
 
-	function handleNewTabClick() {
+	// Export for parent component access (Alt-C shortcut)
+	export function handleNewTabClick() {
 		showBranchDialog = true;
 		dialogError = '';
 	}
@@ -60,7 +61,8 @@
 		dialogError = '';
 	}
 
-	async function checkAndClose(id: string, isExit: boolean) {
+	// Export for parent component access (Alt-D shortcut)
+	export async function checkAndClose(id: string, isExit: boolean) {
 		closeError = '';
 
 		const tab = $terminals.find(t => t.id === id);
@@ -429,11 +431,16 @@
 	$: sortedTerminals = [...$terminals].sort((a, b) =>
 		a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
 	);
+
+	// Get active tab's focus stack for dialogs
+	$: activeTab = $terminals.find(t => t.active);
+	$: activeFocusStack = activeTab?.focusStack || null;
 </script>
 
 <BranchNameDialog
 	bind:show={showBranchDialog}
 	bind:errorMessage={dialogError}
+	focusStack={activeFocusStack}
 	on:submit={handleDialogSubmit}
 	on:cancel={handleDialogCancel}
 />
@@ -443,6 +450,7 @@
 	bind:hasUncommittedChanges
 	bind:hasUnmergedCommits
 	isExit={isExitClose}
+	focusStack={activeFocusStack}
 	on:discard={handleCloseDialogDiscard}
 	on:restart={handleCloseDialogRestart}
 	on:cancel={handleCloseDialogCancel}
@@ -450,6 +458,7 @@
 
 <CommitMessageDialog
 	bind:show={showCommitDialog}
+	focusStack={activeFocusStack}
 	on:submit={handleCommitDialogSubmit}
 	on:cancel={handleCommitDialogCancel}
 />
@@ -461,12 +470,14 @@
 		? "Are you sure you want to discard all pending commits?"
 		: "Are you sure you want to discard all uncommitted local changes?"}
 	confirmText="Discard"
+	focusStack={activeFocusStack}
 	on:confirm={handleDiscardConfirm}
 	on:cancel={handleDiscardCancel}
 />
 
 <RebaseConflictDialog
 	bind:show={showRebaseConflictDialog}
+	focusStack={activeFocusStack}
 	on:close={handleRebaseConflictClose}
 />
 
@@ -489,6 +500,7 @@
 							class="close-btn"
 							on:click={(e) => closeTab(tab.id, e)}
 							aria-label="Close tab"
+							title="Close tab (Alt-D)"
 						>
 							×
 						</button>
@@ -523,7 +535,7 @@
 				</div>
 			</div>
 		{/each}
-		<button class="new-tab-btn" on:click={handleNewTabClick} aria-label="New terminal">
+		<button class="new-tab-btn" on:click={handleNewTabClick} aria-label="New terminal" title="New terminal (Alt-C)">
 			<span class="new-tab-icon">+</span>
 			<span class="new-tab-label">(add working tree)</span>
 		</button>

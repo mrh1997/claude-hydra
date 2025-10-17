@@ -6,6 +6,8 @@
 	import CommitList from './CommitList.svelte';
 	import Splitter from './Splitter.svelte';
 	import DiffViewer from './DiffViewer.svelte';
+	import { shouldBlockFromTerminal } from '$lib/shortcuts';
+	import { FocusStack } from '$lib/FocusStack';
 
 	export let terminalId: string;
 	export let active: boolean = false;
@@ -34,8 +36,13 @@
 	let diffLanguage = 'plaintext';
 	let diffCommitId: string | null = null;
 	let requestedDiffFile = ''; // Track requested file until response arrives
+	let focusStack: FocusStack;
+	let blurTimeout: number | null = null; // Timeout for auto-focus restoration
 
 	onMount(async () => {
+		// Initialize focus stack and register with store
+		focusStack = new FocusStack();
+		terminals.setFocusStack(terminalId, focusStack);
 		// Dynamic imports to avoid SSR issues
 		const [XTermPkg, FitAddonPkg, WebLinksAddonPkg] = await Promise.all([
 			import('@xterm/xterm'),
@@ -98,8 +105,8 @@
 
 		// Handle copy/paste keyboard shortcuts
 		terminal.attachCustomKeyEventHandler((event) => {
-			// F9: Switch to next ready terminal (handled by window event handler)
-			if (event.key === 'F9' && event.type === 'keydown') {
+			// Block application shortcuts (Alt-X, Alt-C, Alt-D) from terminal
+			if (event.type === 'keydown' && shouldBlockFromTerminal(event)) {
 				return false; // Prevent terminal from handling it, let it bubble to window
 			}
 
@@ -126,6 +133,32 @@
 			return true;
 		});
 
+		// Push terminal focus callback to stack
+		focusStack.push(() => {
+			if (terminal && !showDiffViewer) {
+				terminal.focus();
+			}
+		});
+
+		// Auto-restore focus to terminal after 500ms when stack depth is 1 (no dialogs/DiffViewer open)
+		const handleBlur = (event: FocusEvent) => {
+			// Only auto-restore focus when terminal tab is active and stack depth is 1
+			if (active && focusStack && focusStack.depth === 1) {
+				// Clear any existing timeout
+				if (blurTimeout !== null) {
+					clearTimeout(blurTimeout);
+				}
+				// Set new timeout to restore focus after 500ms
+				blurTimeout = window.setTimeout(() => {
+					if (focusStack && focusStack.depth === 1) {
+						focusStack.activate();
+					}
+					blurTimeout = null;
+				}, 500);
+			}
+		};
+		terminalElement.addEventListener('blur', handleBlur, true);
+
 		// Handle resize
 		terminal.onResize(({ cols, rows }) => {
 			if (ws && ws.readyState === WebSocket.OPEN) {
@@ -142,6 +175,10 @@
 		// Cleanup
 		return () => {
 			resizeObserver.disconnect();
+			terminalElement.removeEventListener('blur', handleBlur, true);
+			if (blurTimeout !== null) {
+				clearTimeout(blurTimeout);
+			}
 		};
 	});
 
@@ -248,6 +285,10 @@
 	}
 
 	onDestroy(() => {
+		// Clear any pending blur timeout
+		if (blurTimeout !== null) {
+			clearTimeout(blurTimeout);
+		}
 		if (ws) {
 			if (sessionId) {
 				ws.send(JSON.stringify({ type: 'destroy' }));
@@ -380,12 +421,13 @@
 		active={showDiffViewer && active}
 		width={commitListWidth}
 		commitId={diffCommitId}
+		{focusStack}
 		on:close={handleCloseDiff}
 		on:save={handleSaveFile}
 		on:discard={handleDiscardFile}
 	/>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
-	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} />
+	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} />
 </div>
 
 <style>

@@ -1,14 +1,17 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let show = false;
 	export let parentPath = ''; // Empty string means root directory
 	export let errorMessage = '';
+	export let focusStack: FocusStack | null = null;
 
 	let fileName = '';
 	let isDirectory = false;
 	let inputElement: HTMLInputElement;
 	let dialogElement: HTMLDivElement;
+	let isPushed = false; // Track whether we've pushed to focus stack for current show state
 	const dispatch = createEventDispatcher();
 
 	// Clear input and focus when dialog is shown
@@ -85,6 +88,23 @@
 	}
 
 	$: displayPath = parentPath ? `${parentPath}/` : '';
+
+	// Push/pop focus callback when dialog is shown/hidden
+	$: if (show && focusStack && inputElement && !isPushed) {
+		// Push focus callback when dialog is shown (exactly once per show)
+		focusStack.push(() => {
+			if (inputElement) {
+				inputElement.focus();
+			}
+		});
+		isPushed = true;
+	} else if (!show && isPushed) {
+		// Pop focus callback when dialog closes (exactly once per hide)
+		if (focusStack && focusStack.depth > 1) {
+			focusStack.pop();
+		}
+		isPushed = false;
+	}
 </script>
 
 {#if show}

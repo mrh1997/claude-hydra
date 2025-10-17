@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { FocusStack } from '$lib/FocusStack';
 
 	export let show = false;
 	export let path = '';
 	export let isDirectory = false;
+	export let focusStack: FocusStack | null = null;
 
 	let confirmButton: HTMLButtonElement;
 	let dialogElement: HTMLDivElement;
+	let isPushed = false; // Track whether we've pushed to focus stack for current show state
 	const dispatch = createEventDispatcher();
 
 	// Focus confirm button when dialog is shown
@@ -57,6 +60,23 @@
 				}
 			}
 		}
+	}
+
+	// Push/pop focus callback when dialog is shown/hidden
+	$: if (show && focusStack && confirmButton && !isPushed) {
+		// Push focus callback when dialog is shown (exactly once per show)
+		focusStack.push(() => {
+			if (confirmButton) {
+				confirmButton.focus();
+			}
+		});
+		isPushed = true;
+	} else if (!show && isPushed) {
+		// Pop focus callback when dialog closes (exactly once per hide)
+		if (focusStack && focusStack.depth > 1) {
+			focusStack.pop();
+		}
+		isPushed = false;
 	}
 </script>
 

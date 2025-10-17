@@ -5,6 +5,7 @@
 	import PortInUseError from '$lib/components/PortInUseError.svelte';
 	import FaviconManager from '$lib/components/FaviconManager.svelte';
 	import { terminals } from '$lib/stores/terminals';
+	import { SHORTCUTS, matchesShortcut } from '$lib/shortcuts';
 
 	export let data;
 
@@ -106,9 +107,10 @@
 			});
 		}
 
-		// Handle F9 key to switch to next ready terminal
+		// Handle keyboard shortcuts
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'F9') {
+			// Alt-X: Switch to next ready terminal
+			if (matchesShortcut(event, SHORTCUTS.NEXT_TAB)) {
 				event.preventDefault();
 
 				const currentIndex = $terminals.findIndex(t => t.active);
@@ -126,6 +128,27 @@
 				if (nextReadyTab) {
 					terminals.setActiveTab(nextReadyTab.id);
 				}
+				return;
+			}
+
+			// Alt-C: Create new tab
+			if (matchesShortcut(event, SHORTCUTS.NEW_TAB)) {
+				event.preventDefault();
+				if (terminalTabs) {
+					terminalTabs.handleNewTabClick();
+				}
+				return;
+			}
+
+			// Alt-D: Close current active tab
+			if (matchesShortcut(event, SHORTCUTS.CLOSE_TAB)) {
+				event.preventDefault();
+				const activeTab = $terminals.find(t => t.active);
+				if (activeTab && terminalTabs) {
+					// Use the checkAndClose method which handles uncommitted changes
+					terminalTabs.checkAndClose(activeTab.id, false);
+				}
+				return;
 			}
 		};
 
@@ -209,7 +232,13 @@
 			{:else}
 				{#each $terminals as tab (tab.id)}
 					{@const branchName = terminalData.get(tab.id) || tab.branchName}
-					<Terminal terminalId={tab.id} active={tab.active} {branchName} adoptExisting={tab.adoptExisting} on:exit={handleTerminalExit} />
+					<Terminal
+						terminalId={tab.id}
+						active={tab.active}
+						{branchName}
+						adoptExisting={tab.adoptExisting}
+						on:exit={handleTerminalExit}
+					/>
 				{/each}
 			{/if}
 		</div>
