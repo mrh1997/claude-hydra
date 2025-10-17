@@ -11,18 +11,21 @@
 
 	let confirmButton: HTMLButtonElement;
 	let dialogElement: HTMLDivElement;
+	let isPushed = false; // Track whether we've pushed to focus stack
 	const dispatch = createEventDispatcher();
 
 	// Push/pop focus callback when dialog is shown/hidden
-	$: if (show && focusStack && confirmButton) {
+	$: if (show && focusStack && confirmButton && !isPushed) {
 		focusStack.push(() => {
 			if (confirmButton) {
 				confirmButton.focus();
 			}
 		});
-	} else if (!show && focusStack && focusStack.depth > 1) {
+		isPushed = true;
+	} else if (!show && isPushed && focusStack && focusStack.depth > 1) {
 		// Pop when dialog closes
 		focusStack.pop();
+		isPushed = false;
 	}
 
 	function handleConfirm() {

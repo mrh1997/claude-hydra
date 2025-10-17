@@ -37,7 +37,6 @@
 	let diffCommitId: string | null = null;
 	let requestedDiffFile = ''; // Track requested file until response arrives
 	let focusStack: FocusStack;
-	let blurTimeout: number | null = null; // Timeout for auto-focus restoration
 
 	onMount(async () => {
 		// Initialize focus stack and register with store
@@ -136,28 +135,10 @@
 		// Push terminal focus callback to stack
 		focusStack.push(() => {
 			if (terminal && !showDiffViewer) {
+				console.log('[FOCUS] Terminal callback: focusing terminal (via FocusStack)', { depth: focusStack?.depth });
 				terminal.focus();
 			}
 		});
-
-		// Auto-restore focus to terminal after 500ms when stack depth is 1 (no dialogs/DiffViewer open)
-		const handleBlur = (event: FocusEvent) => {
-			// Only auto-restore focus when terminal tab is active and stack depth is 1
-			if (active && focusStack && focusStack.depth === 1) {
-				// Clear any existing timeout
-				if (blurTimeout !== null) {
-					clearTimeout(blurTimeout);
-				}
-				// Set new timeout to restore focus after 500ms
-				blurTimeout = window.setTimeout(() => {
-					if (focusStack && focusStack.depth === 1) {
-						focusStack.activate();
-					}
-					blurTimeout = null;
-				}, 500);
-			}
-		};
-		terminalElement.addEventListener('blur', handleBlur, true);
 
 		// Handle resize
 		terminal.onResize(({ cols, rows }) => {
@@ -175,10 +156,6 @@
 		// Cleanup
 		return () => {
 			resizeObserver.disconnect();
-			terminalElement.removeEventListener('blur', handleBlur, true);
-			if (blurTimeout !== null) {
-				clearTimeout(blurTimeout);
-			}
 		};
 	});
 
@@ -285,10 +262,6 @@
 	}
 
 	onDestroy(() => {
-		// Clear any pending blur timeout
-		if (blurTimeout !== null) {
-			clearTimeout(blurTimeout);
-		}
 		if (ws) {
 			if (sessionId) {
 				ws.send(JSON.stringify({ type: 'destroy' }));
@@ -302,9 +275,10 @@
 		}
 	});
 
-	$: if (terminal && active) {
-		// Focus terminal when tab becomes active
+	$: if (terminal && active && focusStack && focusStack.depth === 1) {
+		// Focus terminal when tab becomes active (only if no dialogs/DiffViewer are open)
 		setTimeout(() => {
+			console.log('[FOCUS] Terminal reactive: focusing terminal', { active, depth: focusStack.depth });
 			terminal.focus();
 			fitAddon.fit();
 		}, 0);

@@ -9,10 +9,11 @@
 	let branchName = '';
 	let inputElement: HTMLInputElement;
 	let dialogElement: HTMLDivElement;
+	let isPushed = false; // Track whether we've pushed to focus stack
 	const dispatch = createEventDispatcher();
 
 	// Clear input and push/pop focus callback when dialog is shown/hidden
-	$: if (show && focusStack && inputElement) {
+	$: if (show && focusStack && inputElement && !isPushed) {
 		branchName = '';
 		errorMessage = '';
 		focusStack.push(() => {
@@ -20,9 +21,11 @@
 				inputElement.focus();
 			}
 		});
-	} else if (!show && focusStack && focusStack.depth > 1) {
+		isPushed = true;
+	} else if (!show && isPushed && focusStack && focusStack.depth > 1) {
 		// Pop when dialog closes
 		focusStack.pop();
+		isPushed = false;
 	}
 
 	function handleSubmit() {

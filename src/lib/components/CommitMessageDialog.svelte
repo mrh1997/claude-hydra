@@ -8,19 +8,22 @@
 	let commitMessage = '';
 	let textareaElement: HTMLTextAreaElement;
 	let dialogElement: HTMLDivElement;
+	let isPushed = false; // Track whether we've pushed to focus stack
 	const dispatch = createEventDispatcher();
 
 	// Clear input and push/pop focus callback when dialog is shown/hidden
-	$: if (show && focusStack && textareaElement) {
+	$: if (show && focusStack && textareaElement && !isPushed) {
 		commitMessage = '';
 		focusStack.push(() => {
 			if (textareaElement) {
 				textareaElement.focus();
 			}
 		});
-	} else if (!show && focusStack && focusStack.depth > 1) {
+		isPushed = true;
+	} else if (!show && isPushed && focusStack && focusStack.depth > 1) {
 		// Pop when dialog closes
 		focusStack.pop();
+		isPushed = false;
 	}
 
 	function handleSubmit() {

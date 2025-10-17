@@ -243,6 +243,7 @@
 		// Push focus callback when diff viewer becomes active (exactly once per activation)
 		focusStack.push(() => {
 			if (containerElement) {
+				console.log('[FOCUS] DiffViewer callback: focusing container (via FocusStack)', { depth: focusStack?.depth, fileName });
 				containerElement.focus();
 			}
 		});
