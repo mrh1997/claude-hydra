@@ -1,10 +1,7 @@
-import { sessionManager } from '../hooks.server';
-
+// Multi-repository support: No auto-discovery on startup
+// Repositories are opened explicitly by the user via "Open Repository..." button
 export async function load() {
-	// Discover existing claude-hydra worktrees from previous sessions
-	const existingWorktrees = sessionManager.discoverExistingWorktrees();
-
 	return {
-		existingWorktrees
+		// Return empty - user will open repositories manually
 	};
 }

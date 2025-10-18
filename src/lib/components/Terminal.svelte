@@ -12,6 +12,7 @@
 	export let terminalId: string;
 	export let active: boolean = false;
 	export let branchName: string;
+	export let repoPath: string; // Repository path this terminal belongs to
 	export let adoptExisting: boolean = false;
 
 	const dispatch = createEventDispatcher();
@@ -196,8 +197,8 @@
 
 		ws.onopen = () => {
 			console.log('WebSocket connected');
-			// Request new terminal session with branch name
-			ws.send(JSON.stringify({ type: 'create', branchName, adoptExisting }));
+			// Request new terminal session with repository path and branch name
+			ws.send(JSON.stringify({ type: 'create', repoPath, branchName, adoptExisting }));
 		};
 
 		ws.onmessage = (event) => {

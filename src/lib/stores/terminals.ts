@@ -19,6 +19,7 @@ export interface TerminalTab {
 	sessionId: string | null;
 	title: string;
 	branchName: string;
+	repoPath: string; // Repository path this terminal belongs to
 	active: boolean;
 	state: 'ready' | 'running';
 	adoptExisting: boolean;
@@ -32,12 +33,12 @@ function createTerminalsStore() {
 
 	return {
 		subscribe,
-		addTab: (id: string, branchName: string, adoptExisting: boolean = false) => {
+		addTab: (id: string, repoPath: string, branchName: string, adoptExisting: boolean = false) => {
 			update(tabs => {
 				// Deactivate all tabs
 				tabs.forEach(tab => tab.active = false);
 				// Add new tab (start as 'running' until backend detects prompt)
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, active: true, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, repoPath, active: true, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
 			});
 		},
 		removeTab: (id: string) => {

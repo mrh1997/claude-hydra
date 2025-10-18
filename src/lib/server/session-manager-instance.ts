@@ -1,29 +1,29 @@
-import { SessionManager } from './session-manager';
+import { RepositoryRegistry } from './repository-registry';
 
-// Singleton instance of SessionManager
+// Singleton instance of RepositoryRegistry
 // This MUST be initialized by hooks.server.ts on server startup
-let sessionManagerInstance: SessionManager | null = null;
+let repositoryRegistryInstance: RepositoryRegistry | null = null;
 
 /**
- * Gets the singleton SessionManager instance.
- * @throws {Error} If SessionManager has not been initialized by hooks.server.ts
+ * Gets the singleton RepositoryRegistry instance.
+ * @throws {Error} If RepositoryRegistry has not been initialized by hooks.server.ts
  */
-export function getSessionManager(): SessionManager {
-	if (!sessionManagerInstance) {
+export function getRepositoryRegistry(): RepositoryRegistry {
+	if (!repositoryRegistryInstance) {
 		throw new Error(
-			'SessionManager not initialized. This should never happen - hooks.server.ts must initialize it on startup.'
+			'RepositoryRegistry not initialized. This should never happen - hooks.server.ts must initialize it on startup.'
 		);
 	}
-	return sessionManagerInstance;
+	return repositoryRegistryInstance;
 }
 
 /**
- * Sets the singleton SessionManager instance.
+ * Sets the singleton RepositoryRegistry instance.
  * Should only be called once by hooks.server.ts during server initialization.
  */
-export function setSessionManager(instance: SessionManager): void {
-	if (sessionManagerInstance) {
-		console.warn('SessionManager instance is being replaced. This may indicate HMR reload.');
+export function setRepositoryRegistry(instance: RepositoryRegistry): void {
+	if (repositoryRegistryInstance) {
+		console.warn('RepositoryRegistry instance is being replaced. This may indicate HMR reload.');
 	}
-	sessionManagerInstance = instance;
+	repositoryRegistryInstance = instance;
 }

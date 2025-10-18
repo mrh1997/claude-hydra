@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { terminals } from '$lib/stores/terminals';
+	import { repositories } from '$lib/stores/repositories';
 	import { gitBackends } from '$lib/stores/gitBackends';
 	import { v4 as uuidv4 } from 'uuid';
 	import { getContext } from 'svelte';
@@ -8,6 +9,8 @@
 	import CommitMessageDialog from './CommitMessageDialog.svelte';
 	import ConfirmationDialog from './ConfirmationDialog.svelte';
 	import RebaseConflictDialog from './RebaseConflictDialog.svelte';
+	import OpenRepositoryDialog from './OpenRepositoryDialog.svelte';
+	import RepositoryGroup from './RepositoryGroup.svelte';
 
 	const version = getContext<string>('version');
 
@@ -21,9 +24,11 @@
 		return backend;
 	}
 
-	export let onNewTab: (id: string, branchName: string) => void = () => {};
+	export let onNewTab: (id: string, repoPath: string, branchName: string) => void = () => {};
 
+	let showRepositoryDialog = false;
 	let showBranchDialog = false;
+	let pendingRepoPath: string = ''; // Repository path for which we're creating a new tab
 	let showCloseDialog = false;
 	let showCommitDialog = false;
 	let showDiscardConfirmDialog = false;
@@ -43,6 +48,61 @@
 
 	// Export for parent component access (Alt-C shortcut)
 	export function handleNewTabClick() {
+		// For Alt-C shortcut: if there are repositories, pick the first one
+		// Otherwise show the open repository dialog
+		if ($repositories.length > 0) {
+			pendingRepoPath = $repositories[0].path;
+			showBranchDialog = true;
+			dialogError = '';
+		} else {
+			showRepositoryDialog = true;
+		}
+	}
+
+	function handleOpenRepository() {
+		showRepositoryDialog = true;
+	}
+
+	function handleRepositorySubmit(event: CustomEvent<string>) {
+		const repoPath = event.detail;
+		showRepositoryDialog = false;
+
+		// Add repository to store
+		repositories.addRepository(repoPath);
+
+		// Discover existing worktrees for this repository
+		const ws = new WebSocket('ws://localhost:3001');
+		ws.onopen = () => {
+			ws.send(JSON.stringify({ type: 'discoverWorktrees', repoPath }));
+		};
+
+		ws.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			if (data.type === 'worktreesDiscovered') {
+				// Create terminal tabs for each discovered worktree
+				for (const worktree of data.worktrees) {
+					const id = uuidv4();
+					terminals.addTab(id, repoPath, worktree.branchName, true); // adoptExisting = true
+					onNewTab(id, repoPath, worktree.branchName);
+				}
+				ws.close();
+			} else if (data.type === 'error') {
+				console.error('Failed to discover worktrees:', data.error);
+				ws.close();
+			}
+		};
+
+		ws.onerror = (error) => {
+			console.error('WebSocket error during worktree discovery:', error);
+		};
+	}
+
+	function handleRepositoryCancel() {
+		showRepositoryDialog = false;
+	}
+
+	function handleAddWorktree(repoPath: string) {
+		pendingRepoPath = repoPath;
 		showBranchDialog = true;
 		dialogError = '';
 	}
@@ -50,15 +110,30 @@
 	function handleDialogSubmit(event: CustomEvent<string>) {
 		const branchName = event.detail;
 		const id = uuidv4();
-		terminals.addTab(id, branchName);
-		onNewTab(id, branchName);
+		terminals.addTab(id, pendingRepoPath, branchName);
+		onNewTab(id, pendingRepoPath, branchName);
 		showBranchDialog = false;
 		dialogError = '';
+		pendingRepoPath = '';
 	}
 
 	function handleDialogCancel() {
 		showBranchDialog = false;
 		dialogError = '';
+		pendingRepoPath = '';
+	}
+
+	function handleCloseRepository(event: CustomEvent<string>) {
+		const repoPath = event.detail;
+
+		// Close all terminals for this repository
+		const tabsToClose = $terminals.filter(t => t.repoPath === repoPath);
+		for (const tab of tabsToClose) {
+			terminals.removeTab(tab.id);
+		}
+
+		// Remove repository from store
+		repositories.removeRepository(repoPath);
 	}
 
 	// Export for parent component access (Alt-D shortcut)
@@ -432,10 +507,26 @@
 		a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
 	);
 
+	// Group terminals by repository path
+	$: terminalsByRepo = $terminals.reduce((acc, tab) => {
+		if (!acc[tab.repoPath]) {
+			acc[tab.repoPath] = [];
+		}
+		acc[tab.repoPath].push(tab);
+		return acc;
+	}, {} as Record<string, typeof $terminals>);
+
 	// Get active tab's focus stack for dialogs
 	$: activeTab = $terminals.find(t => t.active);
 	$: activeFocusStack = activeTab?.focusStack || null;
 </script>
+
+<OpenRepositoryDialog
+	bind:show={showRepositoryDialog}
+	focusStack={activeFocusStack}
+	on:submit={handleRepositorySubmit}
+	on:cancel={handleRepositoryCancel}
+/>
 
 <BranchNameDialog
 	bind:show={showBranchDialog}
@@ -482,63 +573,29 @@
 />
 
 <div class="tabs-container">
+	<button class="open-repo-btn" on:click={handleOpenRepository}>
+		Open Repository...
+	</button>
+
 	<div class="tabs">
-		{#each sortedTerminals as tab (tab.id)}
-			<div
-				class="tab"
-				class:active={tab.active}
-				on:click={() => selectTab(tab.id)}
-				role="tab"
-				tabindex="0"
-				on:keydown={(e) => e.key === 'Enter' && selectTab(tab.id)}
-			>
-				<div class="tab-content">
-					<div class="tab-header">
-						<span class="state-indicator" class:ready={tab.state === 'ready'} class:running={tab.state === 'running'}></span>
-						<span class="tab-title">{tab.title}</span>
-						<button
-							class="close-btn"
-							on:click={(e) => closeTab(tab.id, e)}
-							aria-label="Close tab"
-							title="Close tab (Alt-D)"
-						>
-							×
-						</button>
-					</div>
-					{#if tab.gitStatus}
-						<div class="badges">
-							{#if tab.gitStatus.hasUncommittedChanges}
-								<div class="badge commit-badge" title="The working directory contains modified files that are not committed yet. Click to commit them.">
-									<span class="badge-text" on:click={(e) => handleCommitBadgeClick(tab, e)}>Modified</span>
-									<button class="badge-x" on:click={(e) => handleDiscardClick(tab, e)}>×</button>
-								</div>
-							{/if}
-							{#if tab.gitStatus.hasUnmergedCommits}
-								<div class="badge merge-badge" title="The branch contains pending commits that are not merged yet. Click to merge them.">
-									{#if operationInProgress.has(tab.id)}
-										<span class="spinner"></span>
-									{/if}
-									<span class="badge-text" on:click={(e) => handleMergeBadgeClick(tab, e)}>Unmerged</span>
-									<button class="badge-x" on:click={(e) => handleResetToBaseClick(tab, e)}>×</button>
-								</div>
-							{/if}
-							{#if tab.gitStatus.isBehindBase}
-								<div class="badge rebase-badge" on:click={(e) => handleRebaseBadgeClick(tab, e)} title="Current branch is behind the base branch. Click to rebase">
-									{#if operationInProgress.has(tab.id)}
-										<span class="spinner"></span>
-									{/if}
-									<span class="badge-text">Outdated</span>
-								</div>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			</div>
+		{#each $repositories as repo (repo.path)}
+			{@const repoTabs = terminalsByRepo[repo.path] || []}
+			<RepositoryGroup
+				repoName={repo.name}
+				repoPath={repo.path}
+				tabs={repoTabs}
+				onTabClick={selectTab}
+				onTabClose={(id) => closeTab(id, new MouseEvent('click'))}
+				onAddWorktree={handleAddWorktree}
+				onCommitBadgeClick={handleCommitBadgeClick}
+				onDiscardClick={handleDiscardClick}
+				onMergeBadgeClick={handleMergeBadgeClick}
+				onResetToBaseClick={handleResetToBaseClick}
+				onRebaseBadgeClick={handleRebaseBadgeClick}
+				{operationInProgress}
+				on:closeRepository={handleCloseRepository}
+			/>
 		{/each}
-		<button class="new-tab-btn" on:click={handleNewTabClick} aria-label="New terminal" title="New terminal (Alt-C)">
-			<span class="new-tab-icon">+</span>
-			<span class="new-tab-label">(add working tree)</span>
-		</button>
 	</div>
 	{#if version}
 		<div class="version-indicator">{version}</div>
@@ -742,6 +799,23 @@
 	.rebase-badge {
 		background-color: #0066cc;
 		color: #ffffff;
+	}
+
+	.open-repo-btn {
+		background: var(--button-background, #0e639c);
+		border: none;
+		color: var(--button-foreground, #ffffff);
+		cursor: pointer;
+		padding: 10px 16px;
+		margin: 8px;
+		border-radius: 2px;
+		font-size: 13px;
+		font-family: inherit;
+		transition: background-color 0.2s;
+	}
+
+	.open-repo-btn:hover {
+		background: var(--button-hover-background, #1177bb);
 	}
 
 	.new-tab-btn {

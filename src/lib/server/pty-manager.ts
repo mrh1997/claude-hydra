@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import type { SessionManager } from '$lib/server/session-manager';
+import type { RepositoryRegistry } from '$lib/server/repository-registry';
 import updateStateTemplate from '../../template/update-state.js?raw';
 import { sendReadyStateWithGitStatus } from './websocket-manager';
 
@@ -19,13 +19,11 @@ export interface TerminalSession {
 export class PtyManager {
 	private sessions = new Map<string, TerminalSession>();
 	private claudePath: string | null = null;
-	private sessionManager: SessionManager;
+	private repositoryRegistry: RepositoryRegistry;
 	private mergingSessions = new Set<string>(); // Track sessions being merged
 
-	constructor(sessionManager: SessionManager) {
-		this.sessionManager = sessionManager;
-		// Ensure .git/info/exclude is updated at startup
-		this.updateGitExclude();
+	constructor(repositoryRegistry: RepositoryRegistry) {
+		this.repositoryRegistry = repositoryRegistry;
 	}
 
 	private getClaudePath(): string {
@@ -56,14 +54,12 @@ export class PtyManager {
 		}
 	}
 
-	private setupClaudeHooks(worktreePath: string, branchName: string): void {
+	private setupClaudeHooks(worktreePath: string, branchName: string, repoRoot: string): void {
 		const claudeDir = join(worktreePath, '.claude');
 		const hooksDir = join(claudeDir, 'hooks');
 		const settingsPath = join(claudeDir, 'settings.local.json');
 		const hookScriptPath = join(hooksDir, 'update-state.js');
-		// Use main repo's git directory, not worktree's
-		const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
-		const gitExcludePath = join(repoDir, '.git', 'info', 'exclude');
+		const gitExcludePath = join(repoRoot, '.git', 'info', 'exclude');
 
 		// Create .claude/hooks directory if it doesn't exist
 		if (!existsSync(hooksDir)) {
@@ -133,12 +129,11 @@ export class PtyManager {
 		writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
 		// Add to .git/info/exclude
-		this.updateGitExclude();
+		this.updateGitExclude(repoRoot);
 	}
 
-	private updateGitExclude(): void {
-		const repoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
-		const gitExcludePath = join(repoDir, '.git', 'info', 'exclude');
+	private updateGitExclude(repoRoot: string): void {
+		const gitExcludePath = join(repoRoot, '.git', 'info', 'exclude');
 		const entriesToAdd = [
 			'.claude/',
 			'.claude-hydra.port'
@@ -239,14 +234,30 @@ export class PtyManager {
 		return this.sessions.get(sessionId)?.branchName;
 	}
 
-	async createSession(branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false): Promise<string> {
+	async createSession(repoPath: string, branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false): Promise<string> {
 		const sessionId = uuidv4();
 
+		// Get or create SessionManager for this repository
+		const sessionManager = this.repositoryRegistry.getOrCreateRepository(repoPath);
+
+		// Register session with repository
+		this.repositoryRegistry.registerSession(sessionId, repoPath);
+
 		// Create isolated git worktree session
-		const sessionInfo = await this.sessionManager.createSession(sessionId, branchName, adoptExisting);
+		const sessionInfo = await sessionManager.createSession(sessionId, branchName, adoptExisting);
+
+		// Get repository root from session manager (via reflection or we can add a getter)
+		// For now, we'll use the worktree's parent directory structure
+		// The worktree is at ~/.claude-hydra/<repo-name-hash>/<branch-name>
+		// We need to find the actual repository root
+		// The SessionManager has repoRoot, but it's private. Let's use git to find it:
+		const repoRoot = execSync('git rev-parse --show-toplevel', {
+			cwd: sessionInfo.worktreePath,
+			encoding: 'utf8'
+		}).trim();
 
 		// Setup Claude hooks
-		this.setupClaudeHooks(sessionInfo.worktreePath, branchName);
+		this.setupClaudeHooks(sessionInfo.worktreePath, branchName, repoRoot);
 
 		// Execute auto-init script only when creating new worktree (not when adopting existing)
 		if (!adoptExisting) {
@@ -349,7 +360,11 @@ export class PtyManager {
 				const cleanupDelay = process.platform === 'win32' ? 1000 : 100;
 				setTimeout(() => {
 					try {
-						this.sessionManager.destroySession(sessionId);
+						const sessionManager = this.repositoryRegistry.getRepositoryBySessionId(sessionId);
+						if (sessionManager) {
+							sessionManager.destroySession(sessionId);
+						}
+						this.repositoryRegistry.unregisterSession(sessionId);
 					} catch (error) {
 						console.error(`Failed to cleanup session ${sessionId}:`, error);
 					}
@@ -362,7 +377,7 @@ export class PtyManager {
 		for (const [sessionId] of this.sessions) {
 			this.destroy(sessionId);
 		}
-		// Clean up any remaining sessions
-		this.sessionManager.destroyAllSessions();
+		// Clean up all repositories
+		this.repositoryRegistry.closeAllRepositories();
 	}
 }

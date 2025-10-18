@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { GitStatus, SessionInfo, CommitInfo } from './session-manager';
-import { getSessionManager } from './session-manager-instance';
+import { getRepositoryRegistry } from './session-manager-instance';
 
 // Persist branchConnections across HMR reloads
 declare global {
@@ -61,24 +61,27 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 	}
 
 	// Also send git branch status with commit log
-	const sessionManager = getSessionManager();
-	const sessionId = sessionManager.getSessionIdByBranch(branchName);
+	const registry = getRepositoryRegistry();
+	const sessionId = registry.getSessionIdByBranch(branchName);
 	if (sessionId) {
-		try {
-			const gitStatus = sessionManager.getGitStatus(sessionId);
-
-			// Try to get commit log, but don't fail if it's unavailable
-			let commitLog: CommitInfo[] | undefined = undefined;
+		const sessionManager = registry.getRepositoryBySessionId(sessionId);
+		if (sessionManager) {
 			try {
-				commitLog = sessionManager.getCommitLog(sessionId);
-			} catch (commitLogError) {
-				console.error(`Failed to get commit log for branch ${branchName}:`, commitLogError);
-				// Continue anyway - we can still send the git status without commit log
-			}
+				const gitStatus = sessionManager.getGitStatus(sessionId);
 
-			sendGitBranchStatus(branchName, gitStatus, commitLog);
-		} catch (error) {
-			console.error(`Failed to get git status for branch ${branchName}:`, error);
+				// Try to get commit log, but don't fail if it's unavailable
+				let commitLog: CommitInfo[] | undefined = undefined;
+				try {
+					commitLog = sessionManager.getCommitLog(sessionId);
+				} catch (commitLogError) {
+					console.error(`Failed to get commit log for branch ${branchName}:`, commitLogError);
+					// Continue anyway - we can still send the git status without commit log
+				}
+
+				sendGitBranchStatus(branchName, gitStatus, commitLog);
+			} catch (error) {
+				console.error(`Failed to get git status for branch ${branchName}:`, error);
+			}
 		}
 	}
 

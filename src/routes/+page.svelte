@@ -38,17 +38,8 @@
 				reconnectTimeout = null;
 			}
 
-			// Auto-restore discovered worktrees (only on initial connection)
-			if (data.existingWorktrees && data.existingWorktrees.length > 0) {
-				console.log('Restoring', data.existingWorktrees.length, 'existing worktree(s)');
-				data.existingWorktrees.forEach((worktree: { branchName: string }) => {
-					const id = crypto.randomUUID();
-					terminals.addTab(id, worktree.branchName, true); // adoptExisting = true
-					terminalData = new Map(terminalData).set(id, worktree.branchName);
-				});
-				// Clear the data so we don't restore again on reconnect
-				data.existingWorktrees = [];
-			}
+			// Multi-repository: No auto-restore on startup
+			// User will open repositories manually via "Open Repository..." button
 		};
 
 		managementWs.onerror = () => {
@@ -233,7 +224,7 @@
 		};
 	});
 
-	function handleNewTab(id: string, branchName: string) {
+	function handleNewTab(id: string, repoPath: string, branchName: string) {
 		terminalData = new Map(terminalData).set(id, branchName);
 	}
 
@@ -272,7 +263,7 @@
 		<div class="terminal-area">
 			{#if $terminals.length === 0}
 				<div class="empty-state">
-					Click '+' to create a new Terminal tab
+					Click 'Open Repository...' to get started
 				</div>
 			{:else}
 				{#each $terminals as tab (tab.id)}
@@ -281,6 +272,7 @@
 						bind:this={terminalComponents[tab.id]}
 						terminalId={tab.id}
 						active={tab.active}
+						repoPath={tab.repoPath}
 						{branchName}
 						adoptExisting={tab.adoptExisting}
 						on:exit={handleTerminalExit}

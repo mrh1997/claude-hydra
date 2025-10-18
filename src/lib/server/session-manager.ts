@@ -33,7 +33,7 @@ export class SessionManager {
 	private baseBranch: string;
 	private sessions: Map<string, SessionInfo>;
 
-	constructor() {
+	constructor(repoPath: string) {
 		// Persist sessions Map across HMR reloads
 		if (globalThis.__sessionManagerSessions) {
 			this.sessions = globalThis.__sessionManagerSessions;
@@ -43,16 +43,13 @@ export class SessionManager {
 			globalThis.__sessionManagerSessions = this.sessions;
 		}
 
-		// Use CLAUDE_HYDRA_REPO_DIR if set, otherwise use current directory
-		const baseRepoDir = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
-
 		// Verify we're in a git repository
-		if (!this.isGitRepository(baseRepoDir)) {
-			throw new Error('Not a git repository. Server must be started from within a git repository.');
+		if (!this.isGitRepository(repoPath)) {
+			throw new Error(`Not a git repository: ${repoPath}`);
 		}
 
 		// Get repository root
-		this.repoRoot = this.getRepoRoot(baseRepoDir);
+		this.repoRoot = this.getRepoRoot(repoPath);
 
 		// Ensure repository has at least one commit and a valid base branch
 		this.ensureValidBaseBranch();
