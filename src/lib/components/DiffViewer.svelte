@@ -242,8 +242,8 @@
 			modifiedEditor.setValue(originalContent);
 		}
 
-		// Save the original content to disk (restores file to HEAD state)
-		dispatch('save', { content: originalContent });
+		// Discard changes using git restore (respects core.autocrlf for proper line endings)
+		dispatch('discard');
 	}
 
 	/**
@@ -387,11 +387,15 @@
 		isPushed = false;
 	}
 
-	// Auto-save whenever isDirty changes state in either direction (when viewing working tree)
+	// Auto-save when user starts editing (isDirty goes from false to true)
 	$: if (commitId === null && diffEditor) {
-		// If isDirty changed state (either true→false or false→true), save the content
+		// If isDirty changed state, check if it's user starting to edit
 		if (previousIsDirty !== isDirty) {
-			handleSave();
+			if (!previousIsDirty && isDirty) {
+				// Only auto-save when isDirty goes from false to true (user started editing)
+				// Don't auto-save when isDirty goes from true to false (discard/save operations)
+				handleSave();
+			}
 			previousIsDirty = isDirty;
 		}
 	}
