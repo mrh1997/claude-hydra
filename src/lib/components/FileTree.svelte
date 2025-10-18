@@ -387,6 +387,28 @@
 		}
 	}
 
+	/**
+	 * Expand all parent directories for a given file path
+	 */
+	function expandParentDirectories(filePath: string) {
+		if (!filePath) return;
+
+		const parts = filePath.split('/').filter(part => part.length > 0);
+		let currentPath = '';
+
+		// Expand each parent directory
+		for (let i = 0; i < parts.length - 1; i++) {
+			currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+			expandedDirs.set(currentPath, true);
+		}
+		expandedDirs = expandedDirs; // Trigger reactivity
+	}
+
+	// React to selectedPath changes and expand parent directories
+	$: if (selectedPath) {
+		expandParentDirectories(selectedPath);
+	}
+
 	$: tree = files ? buildTree(files) : [];
 	$: filteredTree = filterTree(tree, filterMode);
 	$: flatTree = (expandedDirs, renderTree(filteredTree));
