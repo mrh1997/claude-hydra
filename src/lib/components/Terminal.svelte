@@ -534,7 +534,7 @@
 	}
 
 	/**
-	 * Handle Alt+F: Return to diff viewer at last position
+	 * Handle Alt+F: Return to diff viewer at last position, or open first file alphabetically
 	 */
 	export function handleReturnToDiff() {
 		if (lastDiffViewerState && lastDiffViewerState.fileName) {
@@ -547,6 +547,16 @@
 					diffViewerComponent.restorePosition(lastDiffViewerState.position);
 				}
 			}, 100);
+		} else if (files && files.length > 0) {
+			// No previous state - open first non-ignored file alphabetically
+			const sortedFiles = files
+				.filter(f => !f.isDirectory && f.status !== 'ignored')
+				.map(f => f.path)
+				.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+			if (sortedFiles.length > 0) {
+				openFile(sortedFiles[0]);
+			}
 		}
 	}
 

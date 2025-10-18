@@ -356,10 +356,15 @@
 		updateDiffModel();
 	}
 
-	// Layout editor when it becomes active
+	// Layout editor and focus when it becomes active
 	$: if (active && diffEditor) {
 		setTimeout(() => {
 			diffEditor.layout();
+			// Focus the modified editor (right pane) for immediate editing
+			const modifiedEditor = diffEditor.getModifiedEditor();
+			if (modifiedEditor) {
+				modifiedEditor.focus();
+			}
 		}, 0);
 	}
 
@@ -367,8 +372,10 @@
 	$: if (active && containerElement && focusStack && !isPushed) {
 		// Push focus callback when diff viewer becomes active (exactly once per activation)
 		focusStack.push(() => {
-			if (containerElement) {
-				containerElement.focus();
+			// Focus the Monaco modified editor (right pane) for immediate editing
+			const modifiedEditor = diffEditor?.getModifiedEditor();
+			if (modifiedEditor) {
+				modifiedEditor.focus();
 			}
 		});
 		isPushed = true;
