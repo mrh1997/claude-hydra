@@ -10,6 +10,7 @@
 	export let isWorktree: boolean = false;
 	export let gitBackend: GitBackend | null = null;
 	export let focusStack: FocusStack | null = null;
+	export let selectedPath: string | null = null;
 
 	const dispatch = createEventDispatcher();
 
@@ -413,6 +414,7 @@
 						class="file-row {getStatusColor(item.node.status)}"
 						class:directory={item.node.isDirectory}
 						class:file={!item.node.isDirectory}
+						class:selected={!item.node.isDirectory && item.node.path === selectedPath}
 						style="padding-left: {item.depth * 16 + 8}px"
 						on:click={() => handleRowClick(item.node)}
 						on:mouseenter={() => hoveredPath = item.node.path}
@@ -525,6 +527,10 @@
 
 	.file-row:hover {
 		background-color: #2a2a2a;
+	}
+
+	.file-row.selected {
+		background-color: #094771;
 	}
 
 	.file-row.add-entry {

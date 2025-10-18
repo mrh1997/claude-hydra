@@ -13,6 +13,7 @@
 	export let width: number = 350;
 	export let gitBackend: GitBackend | null = null;
 	export let focusStack: FocusStack | null = null;
+	export let selectedPath: string | null = null;
 
 	const dispatch = createEventDispatcher();
 
@@ -143,7 +144,7 @@
 	</div>
 
 	<div class="file-tree-section">
-		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} {focusStack} on:fileClick={handleFileClick} />
+		<FileTree {files} {active} isWorktree={selectedCommitId === null} {gitBackend} {focusStack} {selectedPath} on:fileClick={handleFileClick} />
 	</div>
 </div>
 

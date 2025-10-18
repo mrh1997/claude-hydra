@@ -36,7 +36,14 @@
 	let diffLanguage = 'plaintext';
 	let diffCommitId: string | null = null;
 	let requestedDiffFile = ''; // Track requested file until response arrives
+	let diffViewerComponent: any; // Reference to DiffViewer component
 	let focusStack: FocusStack;
+	let blurTimeout: number | null = null; // Timeout for auto-focus restoration
+
+	// File navigation state for F8/Shift+F8
+	let modifiedFilesList: string[] = []; // List of modified files
+	let currentFileIndex = -1; // Index of currently open file in modifiedFilesList
+	let lastDiffViewerState: { fileName: string; position: any } | null = null; // State to restore with Alt+F
 
 	onMount(async () => {
 		// Initialize focus stack and register with store
@@ -135,10 +142,28 @@
 		// Push terminal focus callback to stack
 		focusStack.push(() => {
 			if (terminal && !showDiffViewer) {
-				console.log('[FOCUS] Terminal callback: focusing terminal (via FocusStack)', { depth: focusStack?.depth });
 				terminal.focus();
 			}
 		});
+
+		// Auto-restore focus to terminal after 500ms when stack depth is 1 (no dialogs/DiffViewer open)
+		const handleBlur = (event: FocusEvent) => {
+			// Only auto-restore focus when terminal tab is active and stack depth is 1
+			if (active && focusStack && focusStack.depth === 1) {
+				// Clear any existing timeout
+				if (blurTimeout !== null) {
+					clearTimeout(blurTimeout);
+				}
+				// Set new timeout to restore focus after 500ms
+				blurTimeout = window.setTimeout(() => {
+					if (focusStack && focusStack.depth === 1) {
+						focusStack.activate();
+					}
+					blurTimeout = null;
+				}, 500);
+			}
+		};
+		terminalElement.addEventListener('blur', handleBlur, true);
 
 		// Handle resize
 		terminal.onResize(({ cols, rows }) => {
@@ -156,6 +181,10 @@
 		// Cleanup
 		return () => {
 			resizeObserver.disconnect();
+			terminalElement.removeEventListener('blur', handleBlur, true);
+			if (blurTimeout !== null) {
+				clearTimeout(blurTimeout);
+			}
 		};
 	});
 
@@ -262,6 +291,10 @@
 	}
 
 	onDestroy(() => {
+		// Clear any pending blur timeout
+		if (blurTimeout !== null) {
+			clearTimeout(blurTimeout);
+		}
 		if (ws) {
 			if (sessionId) {
 				ws.send(JSON.stringify({ type: 'destroy' }));
@@ -275,10 +308,9 @@
 		}
 	});
 
-	$: if (terminal && active && focusStack && focusStack.depth === 1) {
-		// Focus terminal when tab becomes active (only if no dialogs/DiffViewer are open)
+	$: if (terminal && active) {
+		// Focus terminal when tab becomes active
 		setTimeout(() => {
-			console.log('[FOCUS] Terminal reactive: focusing terminal', { active, depth: focusStack.depth });
 			terminal.focus();
 			fitAddon.fit();
 		}, 0);
@@ -287,6 +319,16 @@
 	// Get commit log from store for this terminal
 	$: tab = $terminals.find(t => t.id === terminalId);
 	$: commitLog = tab?.commitLog || null;
+
+	// Update modified files list when files change
+	$: if (files) {
+		modifiedFilesList = files
+			.filter(f => !f.isDirectory && f.status !== 'unchanged' && f.status !== 'ignored')
+			.map(f => f.path);
+
+		// Update current file index when diffFileName changes
+		currentFileIndex = modifiedFilesList.indexOf(diffFileName);
+	}
 
 	function handleCommitSelect(commitId: string | null) {
 		if (gitBackend) {
@@ -345,11 +387,126 @@
 	}
 
 	function handleCloseDiff() {
+		// Save state for Alt+F restore
+		if (diffViewerComponent) {
+			lastDiffViewerState = {
+				fileName: diffFileName,
+				position: diffViewerComponent.getCurrentPosition()
+			};
+		}
+
 		showDiffViewer = false;
 		diffFileName = '';
 		diffOriginalContent = '';
 		diffModifiedContent = '';
 		diffCommitId = null;
+		currentFileIndex = -1;
+	}
+
+	/**
+	 * Handle F8: Jump to next change or next file
+	 */
+	export function handleNextDiff() {
+		if (!showDiffViewer) {
+			// DiffViewer is closed - open first modified file and jump to first change
+			if (modifiedFilesList.length > 0) {
+				openFileAndNavigate(modifiedFilesList[0], true);
+			}
+		} else if (diffViewerComponent) {
+			// DiffViewer is open - check if we can navigate to next change
+			const hasNext = diffViewerComponent.canNavigateNext();
+			if (hasNext) {
+				// Navigate to next change in current file
+				diffViewerComponent.navigateNext();
+			} else if (currentFileIndex < modifiedFilesList.length - 1) {
+				// At last change - open next file
+				openFileAndNavigate(modifiedFilesList[currentFileIndex + 1], true);
+			}
+		}
+	}
+
+	/**
+	 * Handle Shift+F8: Jump to previous change or previous file
+	 */
+	export function handlePrevDiff() {
+		if (!showDiffViewer) {
+			// DiffViewer is closed - open last modified file and jump to last change
+			if (modifiedFilesList.length > 0) {
+				openFileAndNavigate(modifiedFilesList[modifiedFilesList.length - 1], false);
+			}
+		} else if (diffViewerComponent) {
+			// DiffViewer is open - check if we can navigate to previous change
+			const hasPrev = diffViewerComponent.canNavigatePrev();
+			if (hasPrev) {
+				// Navigate to previous change in current file
+				diffViewerComponent.navigatePrev();
+			} else if (currentFileIndex > 0) {
+				// At first change - open previous file
+				openFileAndNavigate(modifiedFilesList[currentFileIndex - 1], false);
+			}
+		}
+	}
+
+	/**
+	 * Handle Alt+F: Return to diff viewer at last position
+	 */
+	export function handleReturnToDiff() {
+		if (lastDiffViewerState && lastDiffViewerState.fileName) {
+			// Reopen the last viewed file
+			openFile(lastDiffViewerState.fileName);
+
+			// Restore position after a short delay to ensure diff is loaded
+			setTimeout(() => {
+				if (diffViewerComponent && lastDiffViewerState) {
+					diffViewerComponent.restorePosition(lastDiffViewerState.position);
+				}
+			}, 100);
+		}
+	}
+
+	/**
+	 * Open a file and navigate to first or last change
+	 */
+	function openFileAndNavigate(filePath: string, navigateToFirst: boolean) {
+		// Request file diff
+		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+			requestedDiffFile = filePath;
+			diffCommitId = null; // Working tree
+			ws.send(JSON.stringify({
+				type: 'getFileDiff',
+				sessionId,
+				filePath: filePath,
+				commitId: null
+			}));
+
+			// After diff loads, navigate to first/last change
+			// This will be handled in the fileDiff message handler
+			setTimeout(() => {
+				if (diffViewerComponent) {
+					if (navigateToFirst) {
+						diffViewerComponent.navigateToFirst();
+					} else {
+						diffViewerComponent.navigateToLast();
+					}
+				}
+			}, 100);
+		}
+	}
+
+	/**
+	 * Open a file without navigation
+	 */
+	function openFile(filePath: string) {
+		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+			requestedDiffFile = filePath;
+			diffCommitId = null;
+			ws.send(JSON.stringify({
+				type: 'getFileDiff',
+				sessionId,
+				filePath: filePath,
+				commitId: null
+			}));
+		}
 	}
 
 	function getLanguageFromFileName(fileName: string): string {
@@ -388,6 +545,7 @@
 <div class="terminal-container" class:hidden={!active}>
 	<div bind:this={terminalElement} class="terminal" style="width: calc(100% - {commitListWidth + 4}px)" class:hidden={showDiffViewer}></div>
 	<DiffViewer
+		bind:this={diffViewerComponent}
 		originalContent={diffOriginalContent}
 		modifiedContent={diffModifiedContent}
 		fileName={diffFileName}
@@ -399,9 +557,11 @@
 		on:close={handleCloseDiff}
 		on:save={handleSaveFile}
 		on:discard={handleDiscardFile}
+		on:nextDiff={handleNextDiff}
+		on:prevDiff={handlePrevDiff}
 	/>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
-	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} />
+	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} selectedPath={showDiffViewer ? diffFileName : null} />
 </div>
 
 <style>

@@ -34,6 +34,8 @@
 	let currentFileName = ''; // Track current file name to detect file changes
 	let detectedEOL: 'lf' | 'crlf' = 'lf'; // Detected line ending style from original file
 	let isPushed = false; // Track whether we've pushed to focus stack for current active state
+	let currentChangeIndex = -1; // Track current change index for manual navigation
+	let changes: any[] = []; // List of changes from Monaco
 
 	onMount(async () => {
 		// Dynamic import to avoid SSR issues
@@ -56,15 +58,43 @@
 			}
 		});
 
+		// Add keyboard shortcuts to the modified editor so they work even when editing
+		const modifiedEditor = diffEditor.getModifiedEditor();
+		if (modifiedEditor) {
+			// F8: Next change
+			modifiedEditor.addCommand(monaco.KeyCode.F8, () => {
+				if (canNavigateNext()) {
+					// Navigate to next change within this file
+					navigateNext();
+				} else {
+					// At last change - dispatch event to navigate to next file
+					dispatch('nextDiff');
+				}
+			});
+
+			// Shift+F8: Previous change
+			modifiedEditor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.F8, () => {
+				if (canNavigatePrev()) {
+					// Navigate to previous change within this file
+					navigatePrev();
+				} else {
+					// At first change - dispatch event to navigate to previous file
+					dispatch('prevDiff');
+				}
+			});
+		}
+
 		// Set the model
 		updateDiffModel();
 
 		// Listen for diff computation updates - Monaco will properly handle LF/CRLF comparison
 		diffEditor.onDidUpdateDiff(() => {
-			const changes = diffEditor.getLineChanges();
+			const lineChanges = diffEditor.getLineChanges();
 			// changes is null if diff not ready, empty array if files identical, array with elements if different
-			if (changes !== null) {
+			if (lineChanges !== null) {
+				changes = lineChanges;
 				isDirty = changes.length > 0;
+				currentChangeIndex = -1; // Reset change index when diff updates
 			}
 		});
 
@@ -100,12 +130,16 @@
 	});
 
 	onDestroy(() => {
-		// Dispose models first
+		// Reset editor's model first to avoid "TextModel got disposed before DiffEditorWidget model got reset" error
+		if (diffEditor) {
+			diffEditor.setModel(null);
+		}
+		// Then dispose models
 		if (currentModels) {
 			currentModels.original?.dispose();
 			currentModels.modified?.dispose();
 		}
-		// Then dispose editor
+		// Finally dispose editor
 		if (diffEditor) {
 			diffEditor.dispose();
 		}
@@ -212,6 +246,96 @@
 		dispatch('save', { content: originalContent });
 	}
 
+	/**
+	 * Navigate to a specific change by index
+	 */
+	function navigateToChange(index: number) {
+		if (!diffEditor || index < 0 || index >= changes.length) return;
+
+		const change = changes[index];
+		const modifiedEditor = diffEditor.getModifiedEditor();
+		if (!modifiedEditor) return;
+
+		const lineNumber = change.modifiedStartLineNumber || 1;
+		modifiedEditor.setPosition({ lineNumber, column: 1 });
+		modifiedEditor.revealLineInCenter(lineNumber);
+		currentChangeIndex = index;
+	}
+
+	/**
+	 * Navigate to first change in the diff
+	 */
+	export function navigateToFirst() {
+		if (changes.length > 0) {
+			navigateToChange(0);
+		}
+	}
+
+	/**
+	 * Navigate to last change in the diff
+	 */
+	export function navigateToLast() {
+		if (changes.length > 0) {
+			navigateToChange(changes.length - 1);
+		}
+	}
+
+	/**
+	 * Navigate to next change
+	 */
+	export function navigateNext() {
+		if (currentChangeIndex < changes.length - 1) {
+			navigateToChange(currentChangeIndex + 1);
+		}
+	}
+
+	/**
+	 * Navigate to previous change
+	 */
+	export function navigatePrev() {
+		if (currentChangeIndex > 0) {
+			navigateToChange(currentChangeIndex - 1);
+		} else if (currentChangeIndex === -1 && changes.length > 0) {
+			// Not yet navigated - jump to last change
+			navigateToChange(changes.length - 1);
+		}
+	}
+
+	/**
+	 * Check if we can navigate to next change
+	 */
+	export function canNavigateNext(): boolean {
+		return currentChangeIndex < changes.length - 1;
+	}
+
+	/**
+	 * Check if we can navigate to previous change
+	 */
+	export function canNavigatePrev(): boolean {
+		return currentChangeIndex > 0 || (currentChangeIndex === -1 && changes.length > 0);
+	}
+
+	/**
+	 * Get current cursor position for saving state
+	 */
+	export function getCurrentPosition() {
+		if (!diffEditor) return null;
+		const modifiedEditor = diffEditor.getModifiedEditor();
+		if (!modifiedEditor) return null;
+		return modifiedEditor.getPosition();
+	}
+
+	/**
+	 * Restore cursor position
+	 */
+	export function restorePosition(position: any) {
+		if (!diffEditor || !position) return;
+		const modifiedEditor = diffEditor.getModifiedEditor();
+		if (!modifiedEditor) return;
+		modifiedEditor.setPosition(position);
+		modifiedEditor.revealPositionInCenter(position);
+	}
+
 	function handleKeyDown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			handleClose();
@@ -222,6 +346,7 @@
 				handleSave();
 			}
 		}
+		// Note: F8/Shift-F8 are handled by Monaco's addCommand() in onMount
 	}
 
 	// Update diff when file or content changes
@@ -243,7 +368,6 @@
 		// Push focus callback when diff viewer becomes active (exactly once per activation)
 		focusStack.push(() => {
 			if (containerElement) {
-				console.log('[FOCUS] DiffViewer callback: focusing container (via FocusStack)', { depth: focusStack?.depth, fileName });
 				containerElement.focus();
 			}
 		});

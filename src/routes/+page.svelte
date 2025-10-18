@@ -12,6 +12,7 @@
 	const managementPort = getContext<number>('managementPort');
 
 	let terminalData: Map<string, string> = new Map();
+	let terminalComponents: Record<string, any> = {}; // Object of terminalId -> Terminal component ref
 	let terminalTabs: TerminalTabs;
 	let managementWs: WebSocket | null = null;
 	let portInUse = false;
@@ -155,6 +156,45 @@
 				}
 				return;
 			}
+
+			// F8: Jump to next diff/first modification
+			if (matchesShortcut(event, SHORTCUTS.NEXT_DIFF)) {
+				event.preventDefault();
+				const activeTab = $terminals.find(t => t.active);
+				if (activeTab) {
+					const terminalComponent = terminalComponents[activeTab.id];
+					if (terminalComponent && terminalComponent.handleNextDiff) {
+						terminalComponent.handleNextDiff();
+					}
+				}
+				return;
+			}
+
+			// Shift+F8: Jump to previous diff/last modification
+			if (matchesShortcut(event, SHORTCUTS.PREV_DIFF)) {
+				event.preventDefault();
+				const activeTab = $terminals.find(t => t.active);
+				if (activeTab) {
+					const terminalComponent = terminalComponents[activeTab.id];
+					if (terminalComponent && terminalComponent.handlePrevDiff) {
+						terminalComponent.handlePrevDiff();
+					}
+				}
+				return;
+			}
+
+			// Alt+F: Return to diff viewer
+			if (matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF)) {
+				event.preventDefault();
+				const activeTab = $terminals.find(t => t.active);
+				if (activeTab) {
+					const terminalComponent = terminalComponents[activeTab.id];
+					if (terminalComponent && terminalComponent.handleReturnToDiff) {
+						terminalComponent.handleReturnToDiff();
+					}
+				}
+				return;
+			}
 		};
 
 		// Handle window/tab close
@@ -238,6 +278,7 @@
 				{#each $terminals as tab (tab.id)}
 					{@const branchName = terminalData.get(tab.id) || tab.branchName}
 					<Terminal
+						bind:this={terminalComponents[tab.id]}
 						terminalId={tab.id}
 						active={tab.active}
 						{branchName}

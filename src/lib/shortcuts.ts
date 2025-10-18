@@ -30,6 +30,27 @@ export const SHORTCUTS = {
 		ctrlKey: false,
 		shiftKey: false,
 		description: 'Close tab (Alt-D)'
+	} as KeyboardShortcut,
+	NEXT_DIFF: {
+		key: 'F8',
+		altKey: false,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Next diff/First modification (F8)'
+	} as KeyboardShortcut,
+	PREV_DIFF: {
+		key: 'F8',
+		altKey: false,
+		ctrlKey: false,
+		shiftKey: true,
+		description: 'Previous diff/Last modification (Shift+F8)'
+	} as KeyboardShortcut,
+	RETURN_TO_DIFF: {
+		key: 'f',
+		altKey: true,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Return to diff viewer (Alt+F)'
 	} as KeyboardShortcut
 };
 
@@ -52,6 +73,9 @@ export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 	return (
 		matchesShortcut(event, SHORTCUTS.NEXT_TAB) ||
 		matchesShortcut(event, SHORTCUTS.NEW_TAB) ||
-		matchesShortcut(event, SHORTCUTS.CLOSE_TAB)
+		matchesShortcut(event, SHORTCUTS.CLOSE_TAB) ||
+		matchesShortcut(event, SHORTCUTS.NEXT_DIFF) ||
+		matchesShortcut(event, SHORTCUTS.PREV_DIFF) ||
+		matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF)
 	);
 }
