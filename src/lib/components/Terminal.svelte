@@ -116,17 +116,20 @@
 				return false; // Prevent terminal from handling it, let it bubble to window
 			}
 
-			// Ctrl+Shift+C: Copy
-			if (event.ctrlKey && event.shiftKey && event.key === 'C' && event.type === 'keydown') {
+			// Ctrl+C: Copy if text is selected, otherwise send interrupt (SIGINT)
+			if (event.ctrlKey && !event.shiftKey && event.key === 'c' && event.type === 'keydown') {
 				const selection = terminal.getSelection();
 				if (selection) {
+					// Text is selected - copy to clipboard
 					navigator.clipboard.writeText(selection);
-					return false;
+					return false; // Prevent terminal from seeing this event
 				}
+				// No selection - let Ctrl+C pass through to send SIGINT
+				return true;
 			}
 
-			// Ctrl+Shift+V: Paste
-			if (event.ctrlKey && event.shiftKey && event.key === 'V' && event.type === 'keydown') {
+			// Ctrl+V: Paste
+			if (event.ctrlKey && !event.shiftKey && event.key === 'v' && event.type === 'keydown') {
 				navigator.clipboard.readText().then(text => {
 					if (ws && ws.readyState === WebSocket.OPEN) {
 						ws.send(JSON.stringify({ type: 'data', data: text }));
