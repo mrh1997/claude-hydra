@@ -353,6 +353,11 @@
 			showCreateDialog = false;
 			createParentPath = '';
 			createErrorMessage = '';
+
+			// If a directory was created and filter is "modified", switch to "all"
+			if (isDirectory && filterMode === 'modified') {
+				filterMode = 'all';
+			}
 		} catch (error: any) {
 			createErrorMessage = error.message || 'Failed to create file';
 		}
