@@ -265,17 +265,16 @@
 	.badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		padding: 2px 6px;
-		border-radius: 3px;
-		font-size: 11px;
-		font-weight: 500;
+		gap: 2px;
+		padding: 1.6px 6px;
+		border-radius: 5px;
+		font-size: 10px;
 		cursor: pointer;
-		transition: filter 0.2s;
+		transition: opacity 0.2s;
 	}
 
 	.badge:hover {
-		filter: brightness(1.2);
+		opacity: 0.8;
 	}
 
 	.badge-text {
@@ -298,8 +297,9 @@
 	}
 
 	.commit-badge {
-		background-color: #f9a825;
-		color: #1e1e1e;
+		background-color: transparent;
+		border: 1px solid #5cacf5;
+		color: #5cacf5;
 	}
 
 	.merge-badge {
