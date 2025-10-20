@@ -135,8 +135,7 @@ export class PtyManager {
 	private updateGitExclude(repoRoot: string): void {
 		const gitExcludePath = join(repoRoot, '.git', 'info', 'exclude');
 		const entriesToAdd = [
-			'.claude/',
-			'.claude-hydra.port'
+			'.claude/'
 		];
 
 		try {
@@ -158,20 +157,21 @@ export class PtyManager {
 	}
 
 	private executeAutoInitScript(worktreePath: string, onData: (data: string) => void): void {
-		const mainRepoRoot = process.env.CLAUDE_HYDRA_REPO_DIR || process.cwd();
 		const isWindows = process.platform === 'win32';
+
+		console.log(`[AutoInit] Searching for autoinit script in worktree: ${worktreePath}`);
 
 		// Define script priorities based on platform
 		const scriptNames = isWindows
 			? ['.claude-hydra.autoinit.ps1', '.claude-hydra.autoinit.cmd', '.claude-hydra.autoinit.sh']
 			: ['.claude-hydra.autoinit.sh'];
 
-		// Find first existing script
+		// Find first existing script in worktree
 		let scriptPath: string | null = null;
 		let scriptType: 'ps1' | 'cmd' | 'sh' | null = null;
 
 		for (const scriptName of scriptNames) {
-			const candidatePath = join(mainRepoRoot, scriptName);
+			const candidatePath = join(worktreePath, scriptName);
 			if (existsSync(candidatePath)) {
 				scriptPath = candidatePath;
 				scriptType = scriptName.endsWith('.ps1') ? 'ps1' : scriptName.endsWith('.cmd') ? 'cmd' : 'sh';
@@ -181,8 +181,11 @@ export class PtyManager {
 
 		// If no script found, return silently
 		if (!scriptPath || !scriptType) {
+			console.log(`[AutoInit] No autoinit script found in ${worktreePath}`);
 			return;
 		}
+
+		console.log(`[AutoInit] Found autoinit script: ${scriptPath}`);
 
 		// Execute the script with worktree as cwd
 		try {
@@ -195,7 +198,7 @@ export class PtyManager {
 				command = `bash "${scriptPath}"`;
 			}
 
-			console.log(`Executing auto-init script: ${scriptPath} (cwd: ${worktreePath})`);
+			console.log(`[AutoInit] Executing: ${scriptPath} (cwd: ${worktreePath})`);
 			onData(`\r\n[Running auto-init script: ${scriptPath}]\r\n`);
 
 			const output = execSync(command, {
