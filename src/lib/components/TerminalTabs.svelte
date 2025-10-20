@@ -13,6 +13,7 @@
 	import RepositoryGroup from './RepositoryGroup.svelte';
 
 	const version = getContext<string>('version');
+	const websocketPort = getContext<number>('websocketPort');
 
 	// Helper function to get GitBackend for a sessionId
 	function getGitBackend(sessionId: string | null) {
@@ -71,7 +72,7 @@
 		repositories.addRepository(repoPath);
 
 		// Discover existing worktrees for this repository
-		const ws = new WebSocket('ws://localhost:3001');
+		const ws = new WebSocket(`ws://localhost:${websocketPort}`);
 		ws.onopen = () => {
 			ws.send(JSON.stringify({ type: 'discoverWorktrees', repoPath }));
 		};
@@ -129,7 +130,7 @@
 		// Close all terminals for this repository
 		const tabsToClose = $terminals.filter(t => t.repoPath === repoPath);
 		for (const tab of tabsToClose) {
-			terminals.removeTab(tab.id);
+			terminals.removeTab(tab.id, true); // Preserve worktrees for restoration
 		}
 
 		// Remove repository from store
@@ -143,7 +144,7 @@
 		const tab = $terminals.find(t => t.id === id);
 		if (!tab || !tab.sessionId) {
 			// No session ID yet, just close
-			terminals.removeTab(id);
+			terminals.removeTab(id, false);
 			return;
 		}
 
@@ -154,7 +155,7 @@
 		const status = tab.gitStatus;
 		if (!status) {
 			// No status available yet, just close
-			terminals.removeTab(id);
+			terminals.removeTab(id, false);
 			pendingCloseTabId = null;
 			return;
 		}
@@ -164,7 +165,7 @@
 
 		// If no changes or commits, just close
 		if (!hasUncommittedChanges && !hasUnmergedCommits) {
-			terminals.removeTab(id);
+			terminals.removeTab(id, false);
 			pendingCloseTabId = null;
 			return;
 		}
@@ -220,7 +221,7 @@
 		const tab = $terminals.find(t => t.id === pendingCloseTabId);
 		if (tab && tab.sessionId) {
 			// Discard both uncommitted changes and unmerged commits
-			const ws = new WebSocket('ws://localhost:3001');
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
 			ws.onopen = () => {
 				// First discard uncommitted changes
 				ws.send(JSON.stringify({ type: 'discardChanges', sessionId: tab.sessionId }));
@@ -248,7 +249,7 @@
 		const tab = $terminals.find(t => t.id === pendingCloseTabId);
 		if (tab && tab.sessionId) {
 			// Send restart request
-			const ws = new WebSocket('ws://localhost:3001');
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
 			ws.onopen = () => {
 				ws.send(JSON.stringify({ type: 'restart', sessionId: tab.sessionId }));
 				ws.close();
@@ -307,7 +308,7 @@
 		// If this tab is being merged, the exit event is expected (merge kills PTY)
 		// Just remove the tab and let the merge flow handle cleanup
 		if (mergingTabIds.has(id)) {
-			terminals.removeTab(id);
+			terminals.removeTab(id, false);
 			mergingTabIds.delete(id);
 			return;
 		}

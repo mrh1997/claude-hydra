@@ -587,7 +587,9 @@ function initWebSocketServer() {
 					case 'destroy':
 						// Destroy terminal session
 						if (sessionId) {
-							ptyManager.destroy(sessionId);
+							// Check if we should preserve the worktree (default: false for backward compatibility)
+							const preserveWorktree = data.preserveWorktree || false;
+							ptyManager.destroy(sessionId, preserveWorktree);
 							sessionId = null;
 						}
 						break;

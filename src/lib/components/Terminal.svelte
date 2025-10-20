@@ -41,6 +41,7 @@
 	let focusStack: FocusStack;
 	let blurTimeout: number | null = null; // Timeout for auto-focus restoration
 	let forceNextDiffUpdate = false; // Force next diff update (used after discard)
+	let preserveWorktree = true; // Whether to preserve worktree on destroy (default: true)
 
 	// File navigation state for F8/Shift+F8
 	let modifiedFilesList: string[] = []; // List of modified files
@@ -318,7 +319,9 @@
 		}
 		if (ws) {
 			if (sessionId) {
-				ws.send(JSON.stringify({ type: 'destroy' }));
+				// Preserve worktree by default - this allows tabs to be restored when repository is reopened
+				// Only destroy worktrees when explicitly requested (e.g., user closes individual tab)
+				ws.send(JSON.stringify({ type: 'destroy', preserveWorktree }));
 				// Unregister GitBackend
 				gitBackends.unregister(sessionId);
 			}
@@ -340,6 +343,10 @@
 	// Get commit log from store for this terminal
 	$: tab = $terminals.find(t => t.id === terminalId);
 	$: commitLog = tab?.commitLog || null;
+	// Update preserveWorktree flag when tab's preserveWorktreeOnDestroy changes
+	$: if (tab?.preserveWorktreeOnDestroy !== undefined) {
+		preserveWorktree = tab.preserveWorktreeOnDestroy;
+	}
 
 	/**
 	 * Sort files hierarchically: subdirectories first (a-z), then files (a-z), depth-first
