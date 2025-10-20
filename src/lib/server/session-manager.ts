@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { existsSync, mkdirSync, rmSync, readFileSync, copyFileSync, readdirSync, statSync, writeFileSync } from 'fs';
-import { join, basename, dirname, relative } from 'path';
+import { join, basename, dirname, relative, resolve } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
 import { glob } from 'glob';
@@ -60,7 +60,8 @@ export class SessionManager {
 		// Set up base directory for worktrees in user home directory
 		// Format: ~/.claude-hydra/<repo-name>-<hash>
 		const repoName = basename(this.repoRoot);
-		const repoHash = createHash('md5').update(this.repoRoot).digest('hex').substring(0, 8);
+		const normalizedPath = this.normalizePathForHash(this.repoRoot);
+		const repoHash = createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
 		this.baseDir = join(homedir(), '.claude-hydra', `${repoName}-${repoHash}`);
 		if (!existsSync(this.baseDir)) {
 			mkdirSync(this.baseDir, { recursive: true });
@@ -70,6 +71,21 @@ export class SessionManager {
 		console.log(`  Repository: ${this.repoRoot}`);
 		console.log(`  Base branch: ${this.baseBranch}`);
 		console.log(`  Base directory: ${this.baseDir}`);
+	}
+
+	/**
+	 * Normalizes a repository path for hash calculation.
+	 * - Resolves . and .. and symbolic links
+	 * - Converts to uppercase on Windows for case-insensitive filesystem consistency
+	 * - Keeps native path separators
+	 * @param repoPath - The repository path to normalize
+	 * @returns Normalized path suitable for hash calculation
+	 */
+	private normalizePathForHash(repoPath: string): string {
+		// Resolve . and .. and symlinks
+		const resolved = resolve(repoPath);
+		// Uppercase on Windows for case-insensitive filesystem consistency
+		return process.platform === 'win32' ? resolved.toUpperCase() : resolved;
 	}
 
 	/**
