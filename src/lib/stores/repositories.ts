@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { addRepoToHistory } from '$lib/utils/repoHistory';
 
 export interface Repository {
 	path: string;
@@ -34,6 +35,9 @@ function createRepositoriesStore() {
 
 				// Extract repository name from path (last part of path)
 				const name = getBasename(repoPath);
+
+				// Add to localStorage history
+				addRepoToHistory(repoPath);
 
 				return [...repos, { path: repoPath, name }];
 			});

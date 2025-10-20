@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import type { FocusStack } from '$lib/FocusStack';
+	import { getRepoHistory, normalizePath } from '$lib/utils/repoHistory';
+	import { repositories } from '$lib/stores/repositories';
 
 	export let show = false;
 	export let focusStack: FocusStack | null = null;
@@ -8,12 +10,29 @@
 	let repoPath = '';
 	let inputElement: HTMLInputElement;
 	let dialogElement: HTMLDivElement;
+	let dropdownElement: HTMLDivElement;
 	let isPushed = false; // Track whether we've pushed to focus stack
+	let showDropdown = false;
+	let selectedIndex = -1;
 	const dispatch = createEventDispatcher();
+
+	// Get recently opened repositories, filtered to exclude currently open ones
+	$: recentRepos = getRepoHistory().filter(historyPath => {
+		const normalizedHistory = normalizePath(historyPath);
+		return !$repositories.some(repo => normalizePath(repo.path) === normalizedHistory);
+	});
+
+	// Filter repos based on current input
+	$: filteredRepos = repoPath.trim() === ''
+		? recentRepos
+		: recentRepos.filter(repo =>
+				repo.toLowerCase().includes(repoPath.toLowerCase())
+		  );
 
 	// Clear input and push/pop focus callback when dialog is shown/hidden
 	$: if (show && focusStack && inputElement && !isPushed) {
 		repoPath = '';
+		selectedIndex = -1;
 		focusStack.push(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -24,6 +43,7 @@
 		// Pop when dialog closes
 		focusStack.pop();
 		isPushed = false;
+		showDropdown = false;
 	}
 
 	function handleSubmit() {
@@ -40,11 +60,57 @@
 		dispatch('cancel');
 	}
 
+	function handleInputFocus() {
+		if (recentRepos.length > 0) {
+			showDropdown = true;
+			selectedIndex = -1;
+		}
+	}
+
+	function handleInputBlur(event: FocusEvent) {
+		// Delay hiding dropdown to allow click on dropdown item
+		setTimeout(() => {
+			showDropdown = false;
+			selectedIndex = -1;
+		}, 200);
+	}
+
+	function handleDropdownItemClick(repo: string) {
+		repoPath = repo;
+		showDropdown = false;
+		selectedIndex = -1;
+		handleSubmit();
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
+			if (showDropdown && selectedIndex >= 0 && selectedIndex < filteredRepos.length) {
+				// Select the highlighted item
+				repoPath = filteredRepos[selectedIndex];
+				showDropdown = false;
+				selectedIndex = -1;
+			}
 			handleSubmit();
 		} else if (event.key === 'Escape') {
-			handleCancel();
+			if (showDropdown) {
+				showDropdown = false;
+				selectedIndex = -1;
+			} else {
+				handleCancel();
+			}
+		} else if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (!showDropdown && recentRepos.length > 0) {
+				showDropdown = true;
+				selectedIndex = 0;
+			} else if (selectedIndex < filteredRepos.length - 1) {
+				selectedIndex++;
+			}
+		} else if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (selectedIndex > 0) {
+				selectedIndex--;
+			}
 		}
 	}
 
@@ -87,14 +153,32 @@
 			aria-labelledby="dialog-title"
 		>
 			<h2 id="dialog-title">Open Repository</h2>
-			<input
-				type="text"
-				bind:value={repoPath}
-				bind:this={inputElement}
-				on:keydown={handleKeydown}
-				placeholder="Enter repository path (e.g., C:\projects\my-repo)"
-				autocomplete="off"
-			/>
+			<div class="input-container">
+				<input
+					type="text"
+					bind:value={repoPath}
+					bind:this={inputElement}
+					on:keydown={handleKeydown}
+					on:focus={handleInputFocus}
+					on:blur={handleInputBlur}
+					placeholder="Enter repository path (e.g., C:\projects\my-repo)"
+					autocomplete="off"
+				/>
+				{#if showDropdown && filteredRepos.length > 0}
+					<div class="dropdown" bind:this={dropdownElement}>
+						{#each filteredRepos as repo, index}
+							<div
+								class="dropdown-item"
+								class:selected={index === selectedIndex}
+								on:mousedown={() => handleDropdownItemClick(repo)}
+								on:mouseenter={() => selectedIndex = index}
+							>
+								{repo}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
 			<div class="button-container">
 				<button on:click={handleSubmit} disabled={!repoPath.trim()}>Open</button>
 				<button on:click={handleCancel}>Cancel</button>
@@ -133,10 +217,14 @@
 		color: var(--foreground, #cccccc);
 	}
 
+	.input-container {
+		position: relative;
+		margin-bottom: 16px;
+	}
+
 	input {
 		width: 100%;
 		padding: 8px;
-		margin-bottom: 16px;
 		background: var(--input-background, #2d2d2d);
 		border: 1px solid var(--input-border, #3e3e3e);
 		border-radius: 2px;
@@ -149,6 +237,37 @@
 	input:focus {
 		outline: none;
 		border-color: var(--focus-border, #007acc);
+	}
+
+	.dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		background: var(--input-background, #2d2d2d);
+		border: 1px solid var(--focus-border, #007acc);
+		border-top: none;
+		border-radius: 0 0 2px 2px;
+		max-height: 200px;
+		overflow-y: auto;
+		z-index: 1001;
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.dropdown-item {
+		padding: 8px;
+		cursor: pointer;
+		color: var(--foreground, #cccccc);
+		font-size: 13px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.dropdown-item:hover,
+	.dropdown-item.selected {
+		background: var(--focus-border, #007acc);
+		color: #ffffff;
 	}
 
 	.button-container {
