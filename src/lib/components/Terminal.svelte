@@ -40,6 +40,7 @@
 	let diffViewerComponent: any; // Reference to DiffViewer component
 	let focusStack: FocusStack;
 	let blurTimeout: number | null = null; // Timeout for auto-focus restoration
+	let forceNextDiffUpdate = false; // Force next diff update (used after discard)
 
 	// File navigation state for F8/Shift+F8
 	let modifiedFilesList: string[] = []; // List of modified files
@@ -231,6 +232,22 @@
 						gitBackend.setFileListCallback((fileList, commitId) => {
 							// Callback when file list is updated
 							files = fileList;
+
+							// If diff viewer is open for working tree, refresh it (file may have been discarded)
+							if (showDiffViewer && diffFileName && diffCommitId === null) {
+								// Force next update to bypass guard (file was likely discarded externally)
+								forceNextDiffUpdate = true;
+								// Re-request the file diff to get updated content
+								if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+									requestedDiffFile = diffFileName;
+									ws.send(JSON.stringify({
+										type: 'getFileDiff',
+										sessionId,
+										filePath: diffFileName,
+										commitId: null
+									}));
+								}
+							}
 						});
 						gitBackends.register(sessionId, gitBackend);
 
@@ -467,6 +484,7 @@
 
 	function handleDiscardFile() {
 		// Send discard file request to backend
+		// Note: forceNextDiffUpdate will be set by fileListCallback when backend responds
 		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
 			ws.send(JSON.stringify({
 				type: 'discardFile',
@@ -654,6 +672,7 @@
 		width={commitListWidth}
 		commitId={diffCommitId}
 		{focusStack}
+		bind:forceUpdate={forceNextDiffUpdate}
 		on:close={handleCloseDiff}
 		on:save={handleSaveFile}
 		on:discard={handleDiscardFile}

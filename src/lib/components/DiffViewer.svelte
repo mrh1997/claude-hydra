@@ -10,6 +10,7 @@
 	export let width: number = 350; // Width of the file tree panel
 	export let commitId: string | null = null; // null = working tree, string = historical commit
 	export let focusStack: FocusStack;
+	export let forceUpdate: boolean = false; // Force update even if content doesn't match editor
 
 	const dispatch = createEventDispatcher();
 
@@ -163,9 +164,16 @@
 		}
 
 		// Don't update models while user is editing the SAME file - this would lose their changes
-		// But DO update if it's a different file
-		if (isDirty && !isNewFile) {
-			return;
+		// Exception 1: if incoming content matches current editor, it's from our auto-save
+		// Exception 2: if forceUpdate is true, update anyway (file was discarded externally)
+		if (isDirty && !isNewFile && !forceUpdate) {
+			const modifiedEditor = diffEditor.getModifiedEditor();
+			const currentEditorValue = modifiedEditor?.getValue() || '';
+
+			// Block update only if content differs (user still editing)
+			if (modifiedContent !== currentEditorValue) {
+				return;
+			}
 		}
 
 		const monaco = await import('monaco-editor');
@@ -205,6 +213,11 @@
 		// Update current content trackers
 		currentOriginal = originalContent;
 		currentModified = modifiedContent;
+
+		// Reset force update flag after successful update
+		if (forceUpdate) {
+			forceUpdate = false;
+		}
 	}
 
 	function handleClose() {
