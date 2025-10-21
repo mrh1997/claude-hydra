@@ -79,10 +79,11 @@
 
 	// Export for parent component access (Alt-C shortcut)
 	export function handleNewTabClick() {
-		// For Alt-C shortcut: if there are repositories, pick the first one
+		// For Alt-C shortcut: use the active tab's repo, or fall back to first repo
 		// Otherwise show the open repository dialog
 		if ($repositories.length > 0) {
-			pendingRepoPath = $repositories[0].path;
+			const activeTab = $terminals.find(t => t.active);
+			pendingRepoPath = activeTab ? activeTab.repoPath : $repositories[0].path;
 			showBranchDialog = true;
 			dialogError = '';
 		} else {
