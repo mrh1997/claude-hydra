@@ -29,7 +29,7 @@
 	</div>
 
 	<div class="tabs-container">
-		{#each tabs as tab (tab.id)}
+		{#each tabs.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })) as tab (tab.id)}
 			<div
 				class="tab"
 				class:active={tab.active}

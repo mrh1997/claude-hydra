@@ -126,9 +126,10 @@
 			if (matchesShortcut(event, SHORTCUTS.NEXT_TAB)) {
 				event.preventDefault();
 
-				// Sort terminals alphabetically to match the UI display order
-				const sortedTerminals = [...$terminals].sort((a, b) =>
-					a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+				// Build tab order matching visual display (by repository order, alphabetically within each repo)
+				const sortedTerminals = $repositories.flatMap(repo =>
+					$terminals.filter(t => t.repoPath === repo.path)
+						.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
 				);
 
 				const currentIndex = sortedTerminals.findIndex(t => t.active);
