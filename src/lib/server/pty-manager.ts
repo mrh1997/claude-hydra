@@ -2,7 +2,7 @@ import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname, resolve } from 'path';
 import type { RepositoryRegistry } from '$lib/server/repository-registry';
 import updateStateTemplate from '../../template/update-state.js?raw';
 import chCommitTemplate from '../../template/commands/ch-commit.md?raw';
@@ -146,11 +146,34 @@ export class PtyManager {
 		this.updateGitExclude(repoRoot);
 	}
 
+	private readIgnoreFilesConfig(repoRoot: string): string[] {
+		const patterns: string[] = [
+			'.claude/'  // Always exclude .claude directory
+		];
+
+		const configPath = join(repoRoot, '.claude-hydra.ignorefiles');
+		if (!existsSync(configPath)) {
+			return patterns;
+		}
+
+		try {
+			const content = readFileSync(configPath, 'utf-8');
+			const configPatterns = content
+				.split('\n')
+				.map(line => line.trim())
+				.filter(line => line && !line.startsWith('#')); // Filter empty lines and comments
+
+			patterns.push(...configPatterns);
+		} catch (error) {
+			console.error('Failed to read .claude-hydra.ignorefiles:', error);
+		}
+
+		return patterns;
+	}
+
 	private updateGitExclude(repoRoot: string): void {
 		const gitExcludePath = join(repoRoot, '.git', 'info', 'exclude');
-		const entriesToAdd = [
-			'.claude/'
-		];
+		const entriesToAdd = this.readIgnoreFilesConfig(repoRoot);
 
 		try {
 			let currentExclude = '';
@@ -166,7 +189,7 @@ export class PtyManager {
 				}
 			}
 		} catch (error) {
-			// Silently ignore errors
+			console.error('Failed to update git exclude:', error);
 		}
 	}
 
@@ -263,15 +286,16 @@ export class PtyManager {
 		// Create isolated git worktree session
 		const sessionInfo = await sessionManager.createSession(sessionId, branchName, adoptExisting);
 
-		// Get repository root from session manager (via reflection or we can add a getter)
-		// For now, we'll use the worktree's parent directory structure
-		// The worktree is at ~/.claude-hydra/<repo-name-hash>/<branch-name>
-		// We need to find the actual repository root
-		// The SessionManager has repoRoot, but it's private. Let's use git to find it:
-		const repoRoot = execSync('git rev-parse --show-toplevel', {
+		// Get the actual main repository root (not the worktree path)
+		// Use git-common-dir to get the main .git directory, then get its parent
+		const gitCommonDir = execSync('git rev-parse --git-common-dir', {
 			cwd: sessionInfo.worktreePath,
 			encoding: 'utf8'
 		}).trim();
+		// gitCommonDir might be relative (e.g., ".git"), so resolve it to absolute path
+		const absoluteGitDir = resolve(sessionInfo.worktreePath, gitCommonDir);
+		// The gitCommonDir points to .git, so get its parent to find the repo root
+		const repoRoot = dirname(absoluteGitDir);
 
 		// Setup Claude hooks
 		this.setupClaudeHooks(sessionInfo.worktreePath, branchName, repoRoot);
