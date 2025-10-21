@@ -2,10 +2,22 @@
 
 Rebase the current branch onto the base branch to incorporate the latest changes.
 
-This will:
-1. If there are uncommitted changes, create a temporary commit
-2. Rebase the current branch onto the base branch
-3. If conflicts occur, resolve them automatically without user interaction
-4. After rebase completes, restore any uncommitted changes back to the working tree (by undoing the temporary commit)
+Please perform the following steps:
 
-All uncommitted changes are preserved throughout the rebase process. Conflicts are resolved automatically without user interaction.
+1. Check for uncommitted changes with `git status`
+2. If there are uncommitted changes:
+   - Create a temporary commit with `git add . && git commit -m "WIP: temporary commit for rebase"`
+   - Note that we need to restore these changes later
+3. base branch is stored in environment variable CLAUDE_HYDRA_BASE_BRANCH
+4. Run `git rebase <base-branch>` to rebase the current branch
+5. If conflicts occur:
+   - Analyse all commits (diffs and commit messages) between the common base commit and the current branch / the common base commit and the base branch
+   - Read the conflicted files
+   - Analyze the conflicts and resolve them automatically by choosing the appropriate version or merging both
+   - Use `git add <resolved-files>` to mark conflicts as resolved
+   - Run `git rebase --continue` to continue the rebase
+   - Repeat until rebase completes
+6. If there was a temporary commit created in step 2:
+   - Run `git reset HEAD~1` to undo the temporary commit while keeping the changes in the working tree
+
+Execute these steps now without asking for confirmation. Handle all conflicts automatically.
