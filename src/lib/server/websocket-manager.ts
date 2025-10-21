@@ -60,27 +60,40 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 		return false;
 	}
 
-	// Also send git branch status with commit log
+	// Check if base branch has changed and get the session manager
 	const registry = getRepositoryRegistry();
 	const sessionId = registry.getSessionIdByBranch(branchName);
 	if (sessionId) {
 		const sessionManager = registry.getRepositoryBySessionId(sessionId);
 		if (sessionManager) {
-			try {
-				const gitStatus = sessionManager.getGitStatus(sessionId);
+			// Check if base branch commit has changed
+			const baseBranchChanged = sessionManager.checkAndUpdateBaseBranch();
 
-				// Try to get commit log, but don't fail if it's unavailable
-				let commitLog: CommitInfo[] | undefined = undefined;
+			if (baseBranchChanged) {
+				// Base branch changed - broadcast git status to all tabs
+				console.log('Base branch changed - broadcasting git status to all tabs');
+				broadcastGitStatusToAll(
+					sessionManager.getAllSessions(),
+					(sid) => sessionManager.getGitStatus(sid)
+				);
+			} else {
+				// Base branch unchanged - just update current tab's git status
 				try {
-					commitLog = sessionManager.getCommitLog(sessionId);
-				} catch (commitLogError) {
-					console.error(`Failed to get commit log for branch ${branchName}:`, commitLogError);
-					// Continue anyway - we can still send the git status without commit log
-				}
+					const gitStatus = sessionManager.getGitStatus(sessionId);
 
-				sendGitBranchStatus(branchName, gitStatus, commitLog);
-			} catch (error) {
-				console.error(`Failed to get git status for branch ${branchName}:`, error);
+					// Try to get commit log, but don't fail if it's unavailable
+					let commitLog: CommitInfo[] | undefined = undefined;
+					try {
+						commitLog = sessionManager.getCommitLog(sessionId);
+					} catch (commitLogError) {
+						console.error(`Failed to get commit log for branch ${branchName}:`, commitLogError);
+						// Continue anyway - we can still send the git status without commit log
+					}
+
+					sendGitBranchStatus(branchName, gitStatus, commitLog);
+				} catch (error) {
+					console.error(`Failed to get git status for branch ${branchName}:`, error);
+				}
 			}
 		}
 	}

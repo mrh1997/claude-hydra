@@ -31,6 +31,7 @@ export class SessionManager {
 	private baseDir: string;
 	private repoRoot: string;
 	private baseBranch: string;
+	private baseBranchCommitId: string | null = null;
 	private sessions: Map<string, SessionInfo>;
 
 	constructor(repoPath: string) {
@@ -57,6 +58,9 @@ export class SessionManager {
 		// Get base branch (the branch we started from)
 		this.baseBranch = this.getBaseBranch();
 
+		// Get initial base branch commit ID
+		this.baseBranchCommitId = this.getBaseBranchCommitId();
+
 		// Set up base directory for worktrees in user home directory
 		// Format: ~/.claude-hydra/<repo-name>-<hash>
 		const repoName = basename(this.repoRoot);
@@ -70,6 +74,7 @@ export class SessionManager {
 		console.log(`SessionManager initialized:`);
 		console.log(`  Repository: ${this.repoRoot}`);
 		console.log(`  Base branch: ${this.baseBranch}`);
+		console.log(`  Base branch commit ID: ${this.baseBranchCommitId}`);
 		console.log(`  Base directory: ${this.baseDir}`);
 	}
 
@@ -576,6 +581,37 @@ export class SessionManager {
 		} catch {
 			return false;
 		}
+	}
+
+	/**
+	 * Gets the current commit ID of the base branch.
+	 * @returns The commit SHA of the base branch, or null if unable to retrieve
+	 */
+	private getBaseBranchCommitId(): string | null {
+		try {
+			return execSync(`git rev-parse ${this.baseBranch}`, {
+				cwd: this.repoRoot,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+		} catch (error) {
+			console.error('Failed to get base branch commit ID:', error);
+			return null;
+		}
+	}
+
+	/**
+	 * Checks if the base branch has changed and updates the stored commit ID.
+	 * @returns True if the base branch commit ID has changed, false otherwise
+	 */
+	checkAndUpdateBaseBranch(): boolean {
+		const currentCommitId = this.getBaseBranchCommitId();
+		if (currentCommitId !== this.baseBranchCommitId) {
+			console.log(`Base branch commit ID changed: ${this.baseBranchCommitId} -> ${currentCommitId}`);
+			this.baseBranchCommitId = currentCommitId;
+			return true;
+		}
+		return false;
 	}
 
 	/**
