@@ -76,9 +76,8 @@
 			</div>
 		{/each}
 
-		<button class="add-worktree-btn" on:click={handleAddWorktree}>
+		<button class="add-worktree-btn" on:click={handleAddWorktree} title="create claude instance on new branch/working tree">
 			<span class="new-tab-icon">+</span>
-			<span class="new-tab-label">(add working tree)</span>
 		</button>
 	</div>
 </div>
@@ -93,8 +92,8 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 6px 12px;
-		background-color: #2d2d2d;
-		border-bottom: 0.5px dashed #666666;
+		margin-top: 2em;
+		background-color: #e0e0e0;
 		font-weight: 600;
 		font-size: 13px;
 	}
@@ -104,13 +103,13 @@
 	}
 
 	.repo-name {
-		color: #cccccc;
+		color: #000000;
 	}
 
 	.close-repo-btn {
 		background: none;
 		border: none;
-		color: #cccccc;
+		color: #000000;
 		cursor: pointer;
 		font-size: 18px;
 		line-height: 1;
@@ -303,7 +302,7 @@
 		color: #cccccc;
 		cursor: pointer;
 		padding: 0;
-		height: 80px;
+		height: 40px;
 		width: 100%;
 		flex-shrink: 0;
 		transition: background-color 0.2s;
