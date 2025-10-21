@@ -276,8 +276,14 @@ export class PtyManager {
 			CLAUDE_HYDRA_BASEURL: baseUrl
 		} as { [key: string]: string };
 
+		// Prepare arguments: add --continue flag only when adopting existing session
+		const args = ['--dangerously-skip-permissions'];
+		if (adoptExisting) {
+			args.push('--continue');
+		}
+
 		// Spawn claude directly with full path, using worktree as cwd
-		const ptyProcess = pty.spawn(claudePath, ['--dangerously-skip-permissions'], {
+		const ptyProcess = pty.spawn(claudePath, args, {
 			name: 'xterm-256color',
 			cols: 80,
 			rows: 30,
