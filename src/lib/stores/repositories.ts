@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { addRepoToHistory } from '$lib/utils/repoHistory';
+import { addRepoToHistory, saveOpenRepositories } from '$lib/utils/repoHistory';
 
 export interface Repository {
 	path: string;
@@ -18,6 +18,11 @@ function getBasename(path: string): string {
 
 function createRepositoriesStore() {
 	const { subscribe, set, update } = writable<Repository[]>([]);
+
+	// Helper to persist repositories to localStorage
+	function persistRepositories(repos: Repository[]) {
+		saveOpenRepositories(repos.map(r => r.path));
+	}
 
 	return {
 		subscribe,
@@ -39,7 +44,9 @@ function createRepositoriesStore() {
 				// Add to localStorage history
 				addRepoToHistory(repoPath);
 
-				return [...repos, { path: repoPath, name }];
+				const newRepos = [...repos, { path: repoPath, name }];
+				persistRepositories(newRepos);
+				return newRepos;
 			});
 		},
 
@@ -48,13 +55,32 @@ function createRepositoriesStore() {
 		 * @param repoPath - Path of the repository to remove
 		 */
 		removeRepository: (repoPath: string) => {
-			update(repos => repos.filter(repo => repo.path !== repoPath));
+			update(repos => {
+				const newRepos = repos.filter(repo => repo.path !== repoPath);
+				persistRepositories(newRepos);
+				return newRepos;
+			});
 		},
 
 		/**
 		 * Clears all repositories
 		 */
-		clear: () => set([])
+		clear: () => {
+			set([]);
+			persistRepositories([]);
+		},
+
+		/**
+		 * Sets the repositories list (used for restoring from localStorage)
+		 * @param repoPaths - Array of repository paths to restore
+		 */
+		restoreRepositories: (repoPaths: string[]) => {
+			const repos = repoPaths.map(path => ({
+				path,
+				name: getBasename(path)
+			}));
+			set(repos);
+		}
 	};
 }
 

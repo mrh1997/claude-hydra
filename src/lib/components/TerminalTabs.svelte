@@ -60,6 +60,38 @@
 		}
 	}
 
+	// Export for programmatic repository opening (auto-restore on startup)
+	export function openRepository(repoPath: string) {
+		// Add repository to store
+		repositories.addRepository(repoPath);
+
+		// Discover existing worktrees for this repository
+		const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+		ws.onopen = () => {
+			ws.send(JSON.stringify({ type: 'discoverWorktrees', repoPath }));
+		};
+
+		ws.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			if (data.type === 'worktreesDiscovered') {
+				// Create terminal tabs for each discovered worktree
+				for (const worktree of data.worktrees) {
+					const id = uuidv4();
+					terminals.addTab(id, repoPath, worktree.branchName, true); // adoptExisting = true
+					onNewTab(id, repoPath, worktree.branchName);
+				}
+				ws.close();
+			} else if (data.type === 'error') {
+				console.error('Failed to discover worktrees:', data.error);
+				ws.close();
+			}
+		};
+
+		ws.onerror = (error) => {
+			console.error('WebSocket error during worktree discovery:', error);
+		};
+	}
+
 	// Export for parent component access (Alt-O shortcut)
 	export function handleOpenRepository() {
 		showRepositoryDialog = true;

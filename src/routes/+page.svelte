@@ -5,6 +5,8 @@
 	import PortInUseError from '$lib/components/PortInUseError.svelte';
 	import FaviconManager from '$lib/components/FaviconManager.svelte';
 	import { terminals } from '$lib/stores/terminals';
+	import { repositories } from '$lib/stores/repositories';
+	import { getOpenRepositories } from '$lib/utils/repoHistory';
 	import { SHORTCUTS, matchesShortcut } from '$lib/shortcuts';
 
 	export let data;
@@ -23,6 +25,25 @@
 	// Check if we're in development mode
 	const isDev = import.meta.env.DEV;
 
+	function restoreOpenRepositories() {
+		// Load previously open repositories from localStorage
+		const openRepos = getOpenRepositories();
+
+		if (openRepos.length === 0) {
+			console.log('No repositories to restore');
+			return;
+		}
+
+		console.log(`Restoring ${openRepos.length} repositories:`, openRepos);
+
+		// Restore each repository in order
+		for (const repoPath of openRepos) {
+			if (terminalTabs) {
+				terminalTabs.openRepository(repoPath);
+			}
+		}
+	}
+
 	function establishManagementConnection() {
 		// Establish management connection
 		managementWs = new WebSocket(`ws://localhost:${managementPort}`);
@@ -38,8 +59,8 @@
 				reconnectTimeout = null;
 			}
 
-			// Multi-repository: No auto-restore on startup
-			// User will open repositories manually via "Open Repository..." button
+			// Auto-restore previously open repositories on startup
+			restoreOpenRepositories();
 		};
 
 		managementWs.onerror = () => {
