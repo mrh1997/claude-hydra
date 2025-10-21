@@ -131,18 +131,23 @@
 				return true;
 			}
 
-			// Ctrl+V: Paste
+			// Ctrl+V: Prevent xterm from consuming it (paste event listener handles it)
 			if (event.ctrlKey && !event.shiftKey && event.key === 'v' && event.type === 'keydown') {
-				navigator.clipboard.readText().then(text => {
-					if (ws && ws.readyState === WebSocket.OPEN) {
-						ws.send(JSON.stringify({ type: 'data', data: text }));
-					}
-				});
+				// Return false to prevent xterm from handling it
 				return false;
 			}
 
 			// Allow all other shortcuts to pass through to Claude Code
 			return true;
+		});
+
+		// Handle paste events (works for both terminal and external clipboard sources)
+		terminalElement.addEventListener('paste', (event: ClipboardEvent) => {
+			event.preventDefault(); // Prevent default paste behavior
+			const text = event.clipboardData?.getData('text');
+			if (text && ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'data', data: text }));
+			}
 		});
 
 		// Push terminal focus callback to stack
