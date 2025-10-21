@@ -31,6 +31,13 @@ export const SHORTCUTS = {
 		shiftKey: false,
 		description: 'Close tab (Alt-D)'
 	} as KeyboardShortcut,
+	OPEN_REPOSITORY: {
+		key: 'o',
+		altKey: true,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Open repository (Alt-O)'
+	} as KeyboardShortcut,
 	NEXT_DIFF: {
 		key: 'F8',
 		altKey: false,
@@ -74,6 +81,7 @@ export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 		matchesShortcut(event, SHORTCUTS.NEXT_TAB) ||
 		matchesShortcut(event, SHORTCUTS.NEW_TAB) ||
 		matchesShortcut(event, SHORTCUTS.CLOSE_TAB) ||
+		matchesShortcut(event, SHORTCUTS.OPEN_REPOSITORY) ||
 		matchesShortcut(event, SHORTCUTS.NEXT_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.PREV_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF)

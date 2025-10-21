@@ -46,6 +46,17 @@
 		showDropdown = false;
 	}
 
+	// Fallback autofocus when focusStack is not available
+	$: if (show && !focusStack && inputElement) {
+		repoPath = '';
+		selectedIndex = -1;
+		setTimeout(() => {
+			if (inputElement) {
+				inputElement.focus();
+			}
+		}, 50);
+	}
+
 	function handleSubmit() {
 		const trimmed = repoPath.trim();
 		if (!trimmed) {

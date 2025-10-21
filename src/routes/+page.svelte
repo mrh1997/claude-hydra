@@ -148,6 +148,15 @@
 				return;
 			}
 
+			// Alt-O: Open repository
+			if (matchesShortcut(event, SHORTCUTS.OPEN_REPOSITORY)) {
+				event.preventDefault();
+				if (terminalTabs) {
+					terminalTabs.handleOpenRepository();
+				}
+				return;
+			}
+
 			// F8: Jump to next diff/first modification
 			if (matchesShortcut(event, SHORTCUTS.NEXT_DIFF)) {
 				event.preventDefault();

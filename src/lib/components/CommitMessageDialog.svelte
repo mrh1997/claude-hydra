@@ -26,6 +26,16 @@
 		isPushed = false;
 	}
 
+	// Fallback autofocus when focusStack is not available
+	$: if (show && !focusStack && textareaElement) {
+		commitMessage = '';
+		setTimeout(() => {
+			if (textareaElement) {
+				textareaElement.focus();
+			}
+		}, 50);
+	}
+
 	function handleSubmit() {
 		const trimmed = commitMessage.trim();
 		if (!trimmed) {

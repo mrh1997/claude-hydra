@@ -28,6 +28,17 @@
 		isPushed = false;
 	}
 
+	// Fallback autofocus when focusStack is not available
+	$: if (show && !focusStack && inputElement) {
+		branchName = '';
+		errorMessage = '';
+		setTimeout(() => {
+			if (inputElement) {
+				inputElement.focus();
+			}
+		}, 50);
+	}
+
 	function handleSubmit() {
 		const trimmed = branchName.trim();
 		if (!trimmed) {

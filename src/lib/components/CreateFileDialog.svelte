@@ -19,7 +19,7 @@
 		fileName = '';
 		isDirectory = false;
 		errorMessage = '';
-		setTimeout(() => inputElement?.focus(), 0);
+		setTimeout(() => inputElement?.focus(), 50);
 	}
 
 	function handleSubmit() {

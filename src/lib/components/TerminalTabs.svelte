@@ -60,7 +60,8 @@
 		}
 	}
 
-	function handleOpenRepository() {
+	// Export for parent component access (Alt-O shortcut)
+	export function handleOpenRepository() {
 		showRepositoryDialog = true;
 	}
 
