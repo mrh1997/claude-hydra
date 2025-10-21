@@ -5,6 +5,9 @@ import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } fr
 import { join } from 'path';
 import type { RepositoryRegistry } from '$lib/server/repository-registry';
 import updateStateTemplate from '../../template/update-state.js?raw';
+import chCommitTemplate from '../../template/commands/ch-commit.md?raw';
+import chMergeTemplate from '../../template/commands/ch-merge.md?raw';
+import chRebaseTemplate from '../../template/commands/ch-rebase.md?raw';
 import { sendReadyStateWithGitStatus } from './websocket-manager';
 
 export interface TerminalSession {
@@ -57,6 +60,7 @@ export class PtyManager {
 	private setupClaudeHooks(worktreePath: string, branchName: string, repoRoot: string): void {
 		const claudeDir = join(worktreePath, '.claude');
 		const hooksDir = join(claudeDir, 'hooks');
+		const commandsDir = join(claudeDir, 'commands');
 		const settingsPath = join(claudeDir, 'settings.local.json');
 		const hookScriptPath = join(hooksDir, 'update-state.js');
 		const gitExcludePath = join(repoRoot, '.git', 'info', 'exclude');
@@ -66,8 +70,18 @@ export class PtyManager {
 			mkdirSync(hooksDir, { recursive: true });
 		}
 
+		// Create .claude/commands directory if it doesn't exist
+		if (!existsSync(commandsDir)) {
+			mkdirSync(commandsDir, { recursive: true });
+		}
+
 		// Write hook script from bundled template
 		writeFileSync(hookScriptPath, updateStateTemplate);
+
+		// Write command files from bundled templates
+		writeFileSync(join(commandsDir, 'ch-commit.md'), chCommitTemplate);
+		writeFileSync(join(commandsDir, 'ch-merge.md'), chMergeTemplate);
+		writeFileSync(join(commandsDir, 'ch-rebase.md'), chRebaseTemplate);
 
 		// Setup settings.local.json
 		let settings: any = {};

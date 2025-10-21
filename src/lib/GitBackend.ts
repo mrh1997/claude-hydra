@@ -151,17 +151,6 @@ export class GitBackend {
 	}
 
 	/**
-	 * Commit all changes with a message
-	 */
-	async commit(message: string): Promise<OperationResult> {
-		return this.sendRequest<OperationResult>(
-			'commit',
-			{ commitMessage: message },
-			'commitResult'
-		);
-	}
-
-	/**
 	 * Discard all uncommitted changes
 	 */
 	async discardChanges(): Promise<OperationResult> {
@@ -180,30 +169,6 @@ export class GitBackend {
 			'resetToBase',
 			{},
 			'resetResult'
-		);
-	}
-
-	/**
-	 * Merge branch to base, optionally committing changes first
-	 */
-	async performMerge(commitMessage?: string): Promise<MergeResult> {
-		return this.sendRequest<MergeResult>(
-			'merge',
-			commitMessage ? { commitMessage } : {},
-			'mergeResult',
-			120000 // 2 minutes timeout for merge (Claude CLI may need time to resolve conflicts)
-		);
-	}
-
-	/**
-	 * Rebase branch onto base
-	 */
-	async performRebase(): Promise<OperationResult> {
-		return this.sendRequest<OperationResult>(
-			'rebase',
-			{},
-			'rebaseResult',
-			120000 // 2 minutes timeout for rebase (Claude CLI may need time to resolve conflicts)
 		);
 	}
 

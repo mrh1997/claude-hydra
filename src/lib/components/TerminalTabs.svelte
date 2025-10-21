@@ -6,7 +6,6 @@
 	import { getContext } from 'svelte';
 	import BranchNameDialog from './BranchNameDialog.svelte';
 	import CloseTabDialog from './CloseTabDialog.svelte';
-	import CommitMessageDialog from './CommitMessageDialog.svelte';
 	import ConfirmationDialog from './ConfirmationDialog.svelte';
 	import RebaseConflictDialog from './RebaseConflictDialog.svelte';
 	import OpenRepositoryDialog from './OpenRepositoryDialog.svelte';
@@ -31,7 +30,6 @@
 	let showBranchDialog = false;
 	let pendingRepoPath: string = ''; // Repository path for which we're creating a new tab
 	let showCloseDialog = false;
-	let showCommitDialog = false;
 	let showDiscardConfirmDialog = false;
 	let showRebaseConflictDialog = false;
 	let dialogError = '';
@@ -213,19 +211,6 @@
 	}
 
 
-	async function performMerge(sessionId: string, commitMessage?: string): Promise<{ success: boolean; error?: string }> {
-		const backend = getGitBackend(sessionId);
-		if (!backend) {
-			return { success: false, error: 'No backend connection' };
-		}
-
-		try {
-			return await backend.performMerge(commitMessage);
-		} catch (error: any) {
-			return { success: false, error: error.message || 'Merge failed' };
-		}
-	}
-
 	async function performRestart(sessionId: string): Promise<{ success: boolean; error?: string }> {
 		const backend = getGitBackend(sessionId);
 		if (!backend) {
@@ -291,47 +276,6 @@
 		pendingCloseTabId = null;
 	}
 
-	async function handleCommitDialogSubmit(event: CustomEvent<string>) {
-		const commitMessage = event.detail;
-		showCommitDialog = false;
-
-		if (!pendingCloseTabId) return;
-
-		const tab = $terminals.find(t => t.id === pendingCloseTabId);
-		if (!tab || !tab.sessionId) return;
-
-		const backend = getGitBackend(tab.sessionId);
-		if (!backend) {
-			closeError = 'No backend connection';
-			setTimeout(() => closeError = '', 5000);
-			pendingCloseTabId = null;
-			return;
-		}
-
-		// Always just commit (never merge)
-		try {
-			const result = await backend.commit(commitMessage);
-
-			if (!result.success) {
-				closeError = result.error || 'Commit failed';
-				setTimeout(() => closeError = '', 5000);
-			} else {
-				successMessage = 'Changes committed successfully';
-				setTimeout(() => successMessage = '', 4000);
-			}
-		} catch (error: any) {
-			closeError = error.message || 'Commit failed';
-			setTimeout(() => closeError = '', 5000);
-		}
-
-		pendingCloseTabId = null;
-	}
-
-	function handleCommitDialogCancel() {
-		showCommitDialog = false;
-		pendingCloseTabId = null;
-	}
-
 	export async function handleExit(id: string) {
 		// Ignore exit events during restart
 		if (isRestarting) {
@@ -347,21 +291,6 @@
 		}
 
 		await checkAndClose(id, true);
-	}
-
-	async function handleCommitBadgeClick(tab: any, event: MouseEvent) {
-		event.stopPropagation();
-		if (!tab.sessionId) return;
-
-		// If tab is not active, just switch to it
-		if (!tab.active) {
-			selectTab(tab.id);
-			return;
-		}
-
-		// Show commit message dialog
-		pendingCloseTabId = tab.id;
-		showCommitDialog = true;
 	}
 
 	async function handleDiscardClick(tab: any, event: MouseEvent) {
@@ -380,53 +309,6 @@
 		showDiscardConfirmDialog = true;
 	}
 
-	async function handleMergeBadgeClick(tab: any, event: MouseEvent) {
-		event.stopPropagation();
-		if (!tab.sessionId) return;
-
-		// If tab is not active, just switch to it
-		if (!tab.active) {
-			selectTab(tab.id);
-			return;
-		}
-
-		// Check if operation already in progress
-		if (operationInProgress.has(tab.id)) return;
-
-		try {
-			// Mark operation as in progress
-			operationInProgress.add(tab.id);
-			operationInProgress = operationInProgress; // Trigger reactivity
-
-			// Directly merge (without committing uncommitted changes)
-			const result = await performMerge(tab.sessionId);
-
-			// Remove from in-progress set
-			operationInProgress.delete(tab.id);
-			operationInProgress = operationInProgress; // Trigger reactivity
-
-			if (result.success) {
-				if (result.conflictsResolved) {
-					// Show dialog about automatic conflict resolution
-					showRebaseConflictDialog = true;
-				} else {
-					successMessage = 'Branch merged successfully';
-					setTimeout(() => successMessage = '', 4000);
-				}
-			} else {
-				closeError = result.error || 'Merge failed';
-				setTimeout(() => closeError = '', 5000);
-			}
-		} catch (error: any) {
-			// Remove from in-progress set on error
-			operationInProgress.delete(tab.id);
-			operationInProgress = operationInProgress; // Trigger reactivity
-
-			closeError = error.message || 'Merge failed';
-			setTimeout(() => closeError = '', 5000);
-		}
-	}
-
 	async function handleResetToBaseClick(tab: any, event: MouseEvent) {
 		event.stopPropagation();
 		if (!tab.sessionId) return;
@@ -441,57 +323,6 @@
 		pendingDiscardTab = tab;
 		isDiscardingCommits = true;
 		showDiscardConfirmDialog = true;
-	}
-
-	async function handleRebaseBadgeClick(tab: any, event: MouseEvent) {
-		event.stopPropagation();
-		if (!tab.sessionId) return;
-
-		// If tab is not active, just switch to it
-		if (!tab.active) {
-			selectTab(tab.id);
-			return;
-		}
-
-		// Check if operation already in progress
-		if (operationInProgress.has(tab.id)) return;
-
-		const backend = getGitBackend(tab.sessionId);
-		if (!backend) {
-			closeError = 'No backend connection';
-			setTimeout(() => closeError = '', 5000);
-			return;
-		}
-
-		try {
-			// Mark operation as in progress
-			operationInProgress.add(tab.id);
-			operationInProgress = operationInProgress; // Trigger reactivity
-
-			const result = await backend.performRebase();
-
-			// Remove from in-progress set
-			operationInProgress.delete(tab.id);
-			operationInProgress = operationInProgress; // Trigger reactivity
-
-			if (!result.success) {
-				closeError = result.error || 'Rebase failed';
-				setTimeout(() => closeError = '', 5000);
-			} else if (result.conflictsResolved) {
-				// Show dialog about automatic conflict resolution
-				showRebaseConflictDialog = true;
-			} else {
-				successMessage = 'Branch rebased successfully';
-				setTimeout(() => successMessage = '', 4000);
-			}
-		} catch (error: any) {
-			// Remove from in-progress set on error
-			operationInProgress.delete(tab.id);
-			operationInProgress = operationInProgress; // Trigger reactivity
-
-			closeError = error.message || 'Rebase failed';
-			setTimeout(() => closeError = '', 5000);
-		}
 	}
 
 	async function handleDiscardConfirm() {
@@ -581,13 +412,6 @@
 	on:cancel={handleCloseDialogCancel}
 />
 
-<CommitMessageDialog
-	bind:show={showCommitDialog}
-	focusStack={activeFocusStack}
-	on:submit={handleCommitDialogSubmit}
-	on:cancel={handleCommitDialogCancel}
-/>
-
 <ConfirmationDialog
 	bind:show={showDiscardConfirmDialog}
 	title="Confirm Discard"
@@ -621,12 +445,8 @@
 				onTabClick={selectTab}
 				onTabClose={(id) => closeTab(id, new MouseEvent('click'))}
 				onAddWorktree={handleAddWorktree}
-				onCommitBadgeClick={handleCommitBadgeClick}
 				onDiscardClick={handleDiscardClick}
-				onMergeBadgeClick={handleMergeBadgeClick}
 				onResetToBaseClick={handleResetToBaseClick}
-				onRebaseBadgeClick={handleRebaseBadgeClick}
-				{operationInProgress}
 				on:closeRepository={handleCloseRepository}
 			/>
 		{/each}

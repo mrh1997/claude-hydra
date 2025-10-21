@@ -8,12 +8,8 @@
 	export let onTabClick: (id: string) => void;
 	export let onTabClose: (id: string, event: MouseEvent) => void;
 	export let onAddWorktree: (repoPath: string) => void;
-	export let onCommitBadgeClick: (tab: TerminalTab, event: MouseEvent) => void;
 	export let onDiscardClick: (tab: TerminalTab, event: MouseEvent) => void;
-	export let onMergeBadgeClick: (tab: TerminalTab, event: MouseEvent) => void;
 	export let onResetToBaseClick: (tab: TerminalTab, event: MouseEvent) => void;
-	export let onRebaseBadgeClick: (tab: TerminalTab, event: MouseEvent) => void;
-	export let operationInProgress: Set<string>;
 
 	const dispatch = createEventDispatcher();
 
@@ -58,25 +54,19 @@
 					{#if tab.gitStatus}
 						<div class="badges">
 							{#if tab.gitStatus.hasUncommittedChanges}
-								<div class="badge commit-badge" title="The working directory contains modified files that are not committed yet. Click to commit them.">
-									<span class="badge-text" on:click={(e) => onCommitBadgeClick(tab, e)}>Modified</span>
+								<div class="badge commit-badge" title="Contains uncommitted local changes. Click 'x' to discard changes or enter /ch-commit command to commit">
+									<span class="badge-text">Modified</span>
 									<button class="badge-x" on:click={(e) => onDiscardClick(tab, e)}>×</button>
 								</div>
 							{/if}
 							{#if tab.gitStatus.hasUnmergedCommits}
-								<div class="badge merge-badge" title="The branch contains pending commits that are not merged yet. Click to merge them.">
-									{#if operationInProgress.has(tab.id)}
-										<span class="spinner"></span>
-									{/if}
-									<span class="badge-text" on:click={(e) => onMergeBadgeClick(tab, e)}>Unmerged</span>
+								<div class="badge merge-badge" title="Contains unmerged commits. Click 'x' to reset to base branch or enter /ch-merge command to merge">
+									<span class="badge-text">Unmerged</span>
 									<button class="badge-x" on:click={(e) => onResetToBaseClick(tab, e)}>×</button>
 								</div>
 							{/if}
 							{#if tab.gitStatus.isBehindBase}
-								<div class="badge rebase-badge" on:click={(e) => onRebaseBadgeClick(tab, e)} title="Current branch is behind the base branch. Click to rebase">
-									{#if operationInProgress.has(tab.id)}
-										<span class="spinner"></span>
-									{/if}
+								<div class="badge rebase-badge" title="Branch is behind base branch. Enter /ch-rebase command to update">
 									<span class="badge-text">Outdated</span>
 								</div>
 							{/if}
@@ -269,12 +259,7 @@
 		padding: 1.6px 6px;
 		border-radius: 5px;
 		font-size: 10px;
-		cursor: pointer;
 		transition: opacity 0.2s;
-	}
-
-	.badge:hover {
-		opacity: 0.8;
 	}
 
 	.badge-text {
