@@ -18,14 +18,27 @@ function getBasename(path: string): string {
 
 function createRepositoriesStore() {
 	const { subscribe, set, update } = writable<Repository[]>([]);
+	let isCliMode = false; // Track if CLI mode is active
 
 	// Helper to persist repositories to localStorage
 	function persistRepositories(repos: Repository[]) {
+		// Don't save to localStorage when in CLI mode
+		if (isCliMode) {
+			return;
+		}
 		saveOpenRepositories(repos.map(r => r.path));
 	}
 
 	return {
 		subscribe,
+
+		/**
+		 * Sets CLI mode to prevent localStorage persistence
+		 * @param enabled - Whether CLI mode is enabled
+		 */
+		setCliMode: (enabled: boolean) => {
+			isCliMode = enabled;
+		},
 
 		/**
 		 * Adds a new repository to the list
@@ -41,7 +54,7 @@ function createRepositoriesStore() {
 				// Extract repository name from path (last part of path)
 				const name = getBasename(repoPath);
 
-				// Add to localStorage history
+				// Add to localStorage history (but not to open repositories when in CLI mode)
 				addRepoToHistory(repoPath);
 
 				const newRepos = [...repos, { path: repoPath, name }];

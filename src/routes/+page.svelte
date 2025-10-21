@@ -25,8 +25,26 @@
 	// Check if we're in development mode
 	const isDev = import.meta.env.DEV;
 
-	function restoreOpenRepositories() {
-		// Load previously open repositories from localStorage
+	async function restoreOpenRepositories() {
+		// First check if CLI repositories were passed
+		const cliRepos = await getCliRepositories();
+
+		if (cliRepos.length > 0) {
+			console.log(`Opening ${cliRepos.length} repositories from command line:`, cliRepos);
+
+			// Enable CLI mode to prevent localStorage persistence
+			repositories.setCliMode(true);
+
+			// Open CLI repositories
+			for (const repoPath of cliRepos) {
+				if (terminalTabs) {
+					terminalTabs.openRepository(repoPath);
+				}
+			}
+			return;
+		}
+
+		// No CLI repos - load previously open repositories from localStorage
 		const openRepos = getOpenRepositories();
 
 		if (openRepos.length === 0) {
@@ -42,6 +60,40 @@
 				terminalTabs.openRepository(repoPath);
 			}
 		}
+	}
+
+	async function getCliRepositories(): Promise<string[]> {
+		return new Promise((resolve) => {
+			if (!managementWs || managementWs.readyState !== WebSocket.OPEN) {
+				resolve([]);
+				return;
+			}
+
+			// Set up one-time message handler
+			const messageHandler = (event: MessageEvent) => {
+				try {
+					const data = JSON.parse(event.data);
+					if (data.type === 'cliRepositories') {
+						managementWs?.removeEventListener('message', messageHandler);
+						resolve(data.repositories || []);
+					}
+				} catch (error) {
+					console.error('Error parsing CLI repositories response:', error);
+					resolve([]);
+				}
+			};
+
+			managementWs.addEventListener('message', messageHandler);
+
+			// Request CLI repositories
+			managementWs.send(JSON.stringify({ type: 'getCliRepositories' }));
+
+			// Timeout after 1 second
+			setTimeout(() => {
+				managementWs?.removeEventListener('message', messageHandler);
+				resolve([]);
+			}, 1000);
+		});
 	}
 
 	function establishManagementConnection() {

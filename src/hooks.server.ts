@@ -12,6 +12,9 @@ const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
 const MGMT_PORT = parseInt(process.env.MGMT_PORT || '3002', 10);
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3000', 10);
 
+// Read CLI repositories from environment variable
+const CLI_REPOSITORIES = process.env.CLI_REPOSITORIES ? JSON.parse(process.env.CLI_REPOSITORIES) : [];
+
 // Use globalThis to persist WebSocket servers across HMR reloads
 declare global {
 	var __wss: WebSocketServer | null;
@@ -653,6 +656,24 @@ function initManagementWebSocketServer() {
 					console.log('No reconnection within 5s - shutting down server');
 					process.exit(0);
 				}, 5000);
+			}
+		});
+
+		ws.on('message', async (message) => {
+			try {
+				const data = JSON.parse(message.toString());
+
+				switch (data.type) {
+					case 'getCliRepositories':
+						// Return CLI repositories passed via command line
+						ws.send(JSON.stringify({
+							type: 'cliRepositories',
+							repositories: CLI_REPOSITORIES
+						}));
+						break;
+				}
+			} catch (error) {
+				console.error('Error handling management message:', error);
 			}
 		});
 

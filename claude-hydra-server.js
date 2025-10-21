@@ -2,7 +2,7 @@
 
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve, isAbsolute } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, accessSync, statSync, constants } from 'fs';
 import { spawn, execSync } from 'child_process';
 import { findAvailablePortTriple, isPortAvailable } from './src/lib/server/port-finder.js';
 
@@ -33,9 +33,94 @@ function parsePortArg() {
 	return null;
 }
 
+// Parse positional arguments (repository paths)
+function parseRepositoryArgs() {
+	const args = process.argv.slice(2);
+	const repoPaths = [];
+
+	// Named flags that consume the next argument
+	const flagsWithValues = ['-p', '--port'];
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		// Skip named flags and their values
+		if (flagsWithValues.includes(arg)) {
+			i++; // Skip next argument (the value)
+			continue;
+		}
+
+		// Skip flags with = syntax or standalone flags
+		if (arg.startsWith('--') || arg.startsWith('-')) {
+			continue;
+		}
+
+		// This is a positional argument - treat as repository path
+		repoPaths.push(arg);
+	}
+
+	return repoPaths;
+}
+
+// Validate a repository path
+function validateRepository(repoPath) {
+	try {
+		// Resolve to absolute path
+		const absolutePath = isAbsolute(repoPath) ? repoPath : resolve(process.cwd(), repoPath);
+
+		// Check if path exists and is accessible
+		accessSync(absolutePath, constants.R_OK);
+
+		// Check if path is a directory
+		const stats = statSync(absolutePath);
+		if (!stats.isDirectory()) {
+			return { valid: false, error: `Not a directory: ${repoPath}` };
+		}
+
+		// Check if it's a git repository
+		try {
+			execSync('git rev-parse --git-dir', {
+				cwd: absolutePath,
+				stdio: 'pipe',
+				encoding: 'utf8'
+			});
+		} catch (gitError) {
+			return { valid: false, error: `Not a git repository: ${repoPath}` };
+		}
+
+		return { valid: true, path: absolutePath };
+	} catch (error) {
+		return { valid: false, error: `Cannot access path: ${repoPath} (${error.message})` };
+	}
+}
+
 // Detect mode: --dev flag or check if build directory exists
 const isDev = process.argv.includes('--dev') || !existsSync(join(__dirname, 'build'));
 let isHeadless = process.argv.includes('--headless') || process.argv.includes('-hl');
+
+// Parse and validate CLI repository arguments
+const cliRepoPaths = parseRepositoryArgs();
+const validatedRepos = [];
+
+if (cliRepoPaths.length > 0) {
+	console.log(`[claude-hydra] Validating ${cliRepoPaths.length} repository path(s) from command line...`);
+
+	for (const repoPath of cliRepoPaths) {
+		const validation = validateRepository(repoPath);
+		if (validation.valid) {
+			validatedRepos.push(validation.path);
+			console.log(`[claude-hydra] ✓ Valid repository: ${validation.path}`);
+		} else {
+			console.warn(`[claude-hydra] ✗ Invalid repository: ${validation.error}`);
+		}
+	}
+
+	if (validatedRepos.length > 0) {
+		console.log(`[claude-hydra] Will open ${validatedRepos.length} repository/repositories from command line`);
+	} else {
+		console.warn(`[claude-hydra] No valid repositories found in command line arguments`);
+	}
+}
 
 // Open browser helper
 async function openBrowser(url) {
@@ -97,6 +182,7 @@ async function startServer() {
 	process.env.WS_PORT = String(wsPort);
 	process.env.MGMT_PORT = String(mgmtPort);
 	process.env.PORT = String(httpPort); // For production build/index.js
+	process.env.CLI_REPOSITORIES = validatedRepos.length > 0 ? JSON.stringify(validatedRepos) : '';
 
 	if (isDev) {
 		// Development mode: Start Vite dev server
