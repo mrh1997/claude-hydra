@@ -146,6 +146,14 @@
 
 				if (nextReadyTab) {
 					terminals.setActiveTab(nextReadyTab.id);
+
+					// Scroll the tab into view
+					setTimeout(() => {
+						const tabElement = document.querySelector(`[data-tab-id="${nextReadyTab.id}"]`);
+						if (tabElement) {
+							tabElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+						}
+					}, 0);
 				}
 				return;
 			}

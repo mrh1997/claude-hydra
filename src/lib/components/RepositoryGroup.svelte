@@ -33,6 +33,7 @@
 			<div
 				class="tab"
 				class:active={tab.active}
+				data-tab-id={tab.id}
 				on:click={() => onTabClick(tab.id)}
 				role="tab"
 				tabindex="0"
