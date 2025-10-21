@@ -1,4 +1,0 @@
-- move .claude-hydra directory to userhome
-- display creation error messages in tab create dialog
-- pasting does not work (neither ctrl-v not alt-v)
-- when creating branch ensure that neither working tree nor branch with that name exists
