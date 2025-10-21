@@ -2,6 +2,7 @@
 	import { terminals } from '$lib/stores/terminals';
 	import { repositories } from '$lib/stores/repositories';
 	import { gitBackends } from '$lib/stores/gitBackends';
+	import { removeRepoFromHistory } from '$lib/utils/repoHistory';
 	import { v4 as uuidv4 } from 'uuid';
 	import { getContext } from 'svelte';
 	import BranchNameDialog from './BranchNameDialog.svelte';
@@ -22,6 +23,37 @@
 			backend = backends.get(sessionId) || null;
 		})();
 		return backend;
+	}
+
+	// Validation function for repository paths
+	async function validateRepository(repoPath: string): Promise<{ valid: boolean; error?: string }> {
+		return new Promise((resolve) => {
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+
+			// Set a timeout for validation
+			const timeout = setTimeout(() => {
+				ws.close();
+				resolve({ valid: false, error: 'Validation timeout' });
+			}, 5000);
+
+			ws.onopen = () => {
+				ws.send(JSON.stringify({ type: 'validateRepository', repoPath }));
+			};
+
+			ws.onmessage = (event) => {
+				clearTimeout(timeout);
+				const data = JSON.parse(event.data);
+				if (data.type === 'repositoryValidated') {
+					resolve({ valid: data.valid, error: data.error });
+					ws.close();
+				}
+			};
+
+			ws.onerror = () => {
+				clearTimeout(timeout);
+				resolve({ valid: false, error: 'WebSocket connection failed' });
+			};
+		});
 	}
 
 	export let onNewTab: (id: string, repoPath: string, branchName: string) => void = () => {};
@@ -389,6 +421,8 @@
 <OpenRepositoryDialog
 	bind:show={showRepositoryDialog}
 	focusStack={activeFocusStack}
+	validateRepository={validateRepository}
+	removeFromHistory={removeRepoFromHistory}
 	on:submit={handleRepositorySubmit}
 	on:cancel={handleRepositoryCancel}
 />

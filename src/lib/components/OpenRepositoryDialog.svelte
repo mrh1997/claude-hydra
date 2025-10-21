@@ -6,6 +6,8 @@
 
 	export let show = false;
 	export let focusStack: FocusStack | null = null;
+	export let validateRepository: (repoPath: string) => Promise<{ valid: boolean; error?: string }>;
+	export let removeFromHistory: (repoPath: string) => void;
 
 	let repoPath = '';
 	let inputElement: HTMLInputElement;
@@ -14,6 +16,8 @@
 	let isPushed = false; // Track whether we've pushed to focus stack
 	let showDropdown = false;
 	let selectedIndex = -1;
+	let errorMessage: string | null = null;
+	let isValidating = false;
 	const dispatch = createEventDispatcher();
 
 	// Get recently opened repositories, filtered to exclude currently open ones
@@ -33,6 +37,8 @@
 	$: if (show && focusStack && inputElement && !isPushed) {
 		repoPath = '';
 		selectedIndex = -1;
+		errorMessage = null;
+		isValidating = false;
 		focusStack.push(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -44,12 +50,16 @@
 		focusStack.pop();
 		isPushed = false;
 		showDropdown = false;
+		errorMessage = null;
+		isValidating = false;
 	}
 
 	// Fallback autofocus when focusStack is not available
 	$: if (show && !focusStack && inputElement) {
 		repoPath = '';
 		selectedIndex = -1;
+		errorMessage = null;
+		isValidating = false;
 		setTimeout(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -57,13 +67,30 @@
 		}, 50);
 	}
 
-	function handleSubmit() {
+	async function handleSubmit() {
 		const trimmed = repoPath.trim();
-		if (!trimmed) {
+		if (!trimmed || isValidating) {
 			return;
 		}
+
+		// Validate the repository path
+		isValidating = true;
+		errorMessage = null;
+
+		const result = await validateRepository(trimmed);
+
+		isValidating = false;
+
+		if (!result.valid) {
+			// Show error message and keep dialog open
+			errorMessage = result.error || 'Invalid repository path';
+			return;
+		}
+
+		// Validation succeeded, dispatch submit event
 		dispatch('submit', trimmed);
 		repoPath = '';
+		errorMessage = null;
 	}
 
 	function handleCancel() {
@@ -86,11 +113,33 @@
 		}, 200);
 	}
 
-	function handleDropdownItemClick(repo: string) {
+	async function handleDropdownItemClick(repo: string) {
 		repoPath = repo;
 		showDropdown = false;
 		selectedIndex = -1;
-		handleSubmit();
+
+		// Validate the selected repository
+		isValidating = true;
+		errorMessage = null;
+
+		const result = await validateRepository(repo);
+
+		isValidating = false;
+
+		if (!result.valid) {
+			// Remove invalid path from history
+			removeFromHistory(repo);
+			// Show error message
+			errorMessage = result.error || 'Invalid repository path';
+			// Clear the input to allow user to try again
+			repoPath = '';
+			return;
+		}
+
+		// Validation succeeded, dispatch submit event
+		dispatch('submit', repo);
+		repoPath = '';
+		errorMessage = null;
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -172,6 +221,7 @@
 					on:keydown={handleKeydown}
 					on:focus={handleInputFocus}
 					on:blur={handleInputBlur}
+					on:input={() => errorMessage = null}
 					placeholder="Enter repository path (e.g., C:\projects\my-repo)"
 					autocomplete="off"
 				/>
@@ -189,10 +239,20 @@
 						{/each}
 					</div>
 				{/if}
+				{#if errorMessage}
+					<div class="error-message">{errorMessage}</div>
+				{/if}
 			</div>
 			<div class="button-container">
-				<button on:click={handleSubmit} disabled={!repoPath.trim()}>Open</button>
-				<button on:click={handleCancel}>Cancel</button>
+				<button on:click={handleSubmit} disabled={!repoPath.trim() || isValidating}>
+					{#if isValidating}
+						<span class="spinner"></span>
+						Validating...
+					{:else}
+						Open
+					{/if}
+				</button>
+				<button on:click={handleCancel} disabled={isValidating}>Cancel</button>
 			</div>
 		</div>
 	</div>
@@ -248,6 +308,32 @@
 	input:focus {
 		outline: none;
 		border-color: var(--focus-border, #007acc);
+	}
+
+	.error-message {
+		color: #f48771;
+		font-size: 12px;
+		margin-top: 4px;
+		padding: 4px 8px;
+		background-color: rgba(90, 29, 29, 0.5);
+		border-left: 2px solid #be1100;
+		border-radius: 2px;
+	}
+
+	.spinner {
+		display: inline-block;
+		width: 12px;
+		height: 12px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: currentColor;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		margin-right: 6px;
+		vertical-align: middle;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 	.dropdown {

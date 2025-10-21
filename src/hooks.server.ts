@@ -4,6 +4,8 @@ import { PtyManager } from '$lib/server/pty-manager';
 import { RepositoryRegistry } from '$lib/server/repository-registry';
 import { registerConnection, unregisterConnection, sendGitBranchStatus, broadcastGitStatusToAll } from '$lib/server/websocket-manager';
 import { setRepositoryRegistry } from '$lib/server/session-manager-instance';
+import { promises as fs } from 'fs';
+import { execSync } from 'child_process';
 
 // Read ports from environment variables set by claude-hydra-server.js
 const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
@@ -465,6 +467,84 @@ function initWebSocketServer() {
 									ws.send(JSON.stringify({ type: 'fileDiscarded', success: false, error: errorMessage }));
 								}
 							}
+						}
+						break;
+
+					case 'validateRepository':
+						// Validate repository path
+						try {
+							if (!data.repoPath) {
+								ws.send(JSON.stringify({
+									type: 'repositoryValidated',
+									valid: false,
+									error: 'Repository path is required'
+								}));
+								break;
+							}
+
+							const repoPath = data.repoPath;
+
+							// Check if path exists
+							try {
+								await fs.access(repoPath);
+							} catch (error) {
+								ws.send(JSON.stringify({
+									type: 'repositoryValidated',
+									valid: false,
+									error: 'Directory does not exist or is not accessible'
+								}));
+								break;
+							}
+
+							// Check if path is a directory
+							try {
+								const stats = await fs.stat(repoPath);
+								if (!stats.isDirectory()) {
+									ws.send(JSON.stringify({
+										type: 'repositoryValidated',
+										valid: false,
+										error: 'Path is not a directory'
+									}));
+									break;
+								}
+							} catch (error) {
+								ws.send(JSON.stringify({
+									type: 'repositoryValidated',
+									valid: false,
+									error: 'Unable to access directory'
+								}));
+								break;
+							}
+
+							// Check if it's a git repository
+							try {
+								execSync('git rev-parse --git-dir', {
+									cwd: repoPath,
+									stdio: 'pipe',
+									encoding: 'utf8'
+								});
+							} catch (error) {
+								ws.send(JSON.stringify({
+									type: 'repositoryValidated',
+									valid: false,
+									error: 'Not a git repository'
+								}));
+								break;
+							}
+
+							// All validations passed
+							ws.send(JSON.stringify({
+								type: 'repositoryValidated',
+								valid: true
+							}));
+						} catch (error: any) {
+							const errorMessage = error.message || String(error);
+							console.error('Failed to validate repository:', errorMessage);
+							ws.send(JSON.stringify({
+								type: 'repositoryValidated',
+								valid: false,
+								error: 'Validation failed: ' + errorMessage
+							}));
 						}
 						break;
 
