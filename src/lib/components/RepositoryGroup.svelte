@@ -24,7 +24,12 @@
 
 <div class="repository-group">
 	<div class="repo-header">
-		<span class="repo-name">{repoName}</span>
+		<div class="repo-title">
+			<svg class="folder-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+				<path d="M19 20H4C2.89543 20 2 19.1046 2 18V6C2 4.89543 2.89543 4 4 4H9L11 6H19C20.1046 6 21 6.89543 21 8V18C21 19.1046 20.1046 20 19 20Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			</svg>
+			<span class="repo-name">{repoName}</span>
+		</div>
 		<button class="close-repo-btn" on:click={handleCloseRepository} title="Close repository">×</button>
 	</div>
 
@@ -94,13 +99,24 @@
 		justify-content: space-between;
 		padding: 6px 12px;
 		margin-top: 2em;
-		background-color: #e0e0e0;
+		background-color: #888888;
 		font-weight: 600;
 		font-size: 13px;
 	}
 
 	.repo-header:hover .close-repo-btn {
 		opacity: 0.7;
+	}
+
+	.repo-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.folder-icon {
+		color: #000000;
+		flex-shrink: 0;
 	}
 
 	.repo-name {
