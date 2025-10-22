@@ -371,6 +371,8 @@
 		setTimeout(() => {
 			terminal.focus();
 			fitAddon.fit();
+			// Scroll to bottom to prevent viewport reset after fit
+			terminal.scrollToBottom();
 		}, 0);
 	}
 
