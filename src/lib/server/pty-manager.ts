@@ -8,6 +8,7 @@ import updateStateTemplate from '../../template/update-state.js?raw';
 import chCommitTemplate from '../../template/commands/ch-commit.md?raw';
 import chMergeTemplate from '../../template/commands/ch-merge.md?raw';
 import chRebaseTemplate from '../../template/commands/ch-rebase.md?raw';
+import chCloseTemplate from '../../template/commands/ch-close.md?raw';
 import { sendReadyStateWithGitStatus } from './websocket-manager';
 
 export interface TerminalSession {
@@ -82,6 +83,7 @@ export class PtyManager {
 		writeFileSync(join(commandsDir, 'ch-commit.md'), chCommitTemplate);
 		writeFileSync(join(commandsDir, 'ch-merge.md'), chMergeTemplate);
 		writeFileSync(join(commandsDir, 'ch-rebase.md'), chRebaseTemplate);
+		writeFileSync(join(commandsDir, 'ch-close.md'), chCloseTemplate);
 
 		// Setup settings.local.json
 		let settings: any = {};

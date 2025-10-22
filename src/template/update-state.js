@@ -6,7 +6,7 @@ import https from 'https';
 
 // Get state from command line argument
 const state = process.argv[2];
-if (!state || !['ready', 'running'].includes(state)) {
+if (!state || !['ready', 'running', 'close'].includes(state)) {
   process.exit(1);
 }
 

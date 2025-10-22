@@ -100,3 +100,12 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 
 	return true;
 }
+
+export function sendCloseTabRequest(branchName: string): boolean {
+	const ws = branchConnections.get(branchName);
+	if (ws && ws.readyState === ws.OPEN) {
+		ws.send(JSON.stringify({ type: 'closeTab' }));
+		return true;
+	}
+	return false;
+}

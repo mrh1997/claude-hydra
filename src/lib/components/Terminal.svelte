@@ -283,6 +283,10 @@
 						}
 						break;
 
+					case 'closeTab':
+						dispatch('requestClose', { terminalId });
+						break;
+
 					case 'exit':
 						dispatch('exit', { terminalId });
 						break;

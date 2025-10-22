@@ -362,6 +362,11 @@
 		}
 	}
 
+	function handleRequestClose(event: CustomEvent<{ terminalId: string }>) {
+		// Close the tab directly without dialog since backend already checked git status
+		terminals.removeTab(event.detail.terminalId, false);
+	}
+
 	$: activeTerminal = $terminals.find(t => t.active);
 	$: activeBranchName = activeTerminal ? (terminalData.get(activeTerminal.id) || activeTerminal.branchName) : null;
 	$: pageTitle = activeBranchName ? `${activeBranchName} - Claude Hydra` : 'Claude Hydra';
@@ -404,6 +409,7 @@
 						{branchName}
 						adoptExisting={tab.adoptExisting}
 						on:exit={handleTerminalExit}
+						on:requestClose={handleRequestClose}
 					/>
 				{/each}
 			{/if}
