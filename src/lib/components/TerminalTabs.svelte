@@ -76,11 +76,27 @@
 	let isRestarting = false;
 	let mergingTabIds = new Set<string>(); // Track tabs currently being merged
 	let operationInProgress = new Set<string>(); // Track tabs with operations in progress
+	let createTabInBackground = false; // Track if new tab should be created in background
 
 	// Export for parent component access (Alt-C shortcut)
 	export function handleNewTabClick() {
 		// For Alt-C shortcut: use the active tab's repo, or fall back to first repo
 		// Otherwise show the open repository dialog
+		createTabInBackground = false;
+		if ($repositories.length > 0) {
+			const activeTab = $terminals.find(t => t.active);
+			pendingRepoPath = activeTab ? activeTab.repoPath : $repositories[0].path;
+			showBranchDialog = true;
+			dialogError = '';
+		} else {
+			showRepositoryDialog = true;
+		}
+	}
+
+	// Export for parent component access (Alt-Shift-C shortcut)
+	export function handleNewTabClickBackground() {
+		// For Alt-Shift-C shortcut: same as Alt-C but create tab in background
+		createTabInBackground = true;
 		if ($repositories.length > 0) {
 			const activeTab = $terminals.find(t => t.active);
 			pendingRepoPath = activeTab ? activeTab.repoPath : $repositories[0].path;
@@ -175,11 +191,12 @@
 	function handleDialogSubmit(event: CustomEvent<string>) {
 		const branchName = event.detail;
 		const id = uuidv4();
-		terminals.addTab(id, pendingRepoPath, branchName);
+		terminals.addTab(id, pendingRepoPath, branchName, false, !createTabInBackground);
 		onNewTab(id, pendingRepoPath, branchName);
 		showBranchDialog = false;
 		dialogError = '';
 		pendingRepoPath = '';
+		createTabInBackground = false;
 	}
 
 	function handleDialogCancel() {

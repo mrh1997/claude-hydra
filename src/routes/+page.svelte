@@ -256,6 +256,15 @@
 				return;
 			}
 
+			// Alt-Shift-C: Create new tab in background
+			if (matchesShortcut(event, SHORTCUTS.NEW_TAB_BACKGROUND)) {
+				event.preventDefault();
+				if (terminalTabs) {
+					terminalTabs.handleNewTabClickBackground();
+				}
+				return;
+			}
+
 			// Alt-D: Close current active tab
 			if (matchesShortcut(event, SHORTCUTS.CLOSE_TAB)) {
 				event.preventDefault();

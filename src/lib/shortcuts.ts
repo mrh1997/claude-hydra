@@ -38,6 +38,13 @@ export const SHORTCUTS = {
 		shiftKey: false,
 		description: 'New tab (Alt-C)'
 	} as KeyboardShortcut,
+	NEW_TAB_BACKGROUND: {
+		key: 'c',
+		altKey: true,
+		ctrlKey: false,
+		shiftKey: true,
+		description: 'New tab in background (Alt-Shift-C)'
+	} as KeyboardShortcut,
 	CLOSE_TAB: {
 		key: 'd',
 		altKey: true,
@@ -96,6 +103,7 @@ export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 		matchesShortcut(event, SHORTCUTS.PREV_TAB) ||
 		matchesShortcut(event, SHORTCUTS.NEXT_TAB_SIMPLE) ||
 		matchesShortcut(event, SHORTCUTS.NEW_TAB) ||
+		matchesShortcut(event, SHORTCUTS.NEW_TAB_BACKGROUND) ||
 		matchesShortcut(event, SHORTCUTS.CLOSE_TAB) ||
 		matchesShortcut(event, SHORTCUTS.OPEN_REPOSITORY) ||
 		matchesShortcut(event, SHORTCUTS.NEXT_DIFF) ||
