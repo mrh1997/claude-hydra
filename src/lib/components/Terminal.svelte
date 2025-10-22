@@ -167,8 +167,12 @@
 
 		// Auto-restore focus to terminal after 500ms when stack depth is 1 (no dialogs/DiffViewer open)
 		const handleBlur = (event: FocusEvent) => {
-			// Only auto-restore focus when terminal tab is active and stack depth is 1
-			if (active && focusStack && focusStack.depth === 1) {
+			// Skip if focus moved to a dialog (check for .overlay parent or role="dialog")
+			const relatedElement = event.relatedTarget as HTMLElement | null;
+			const isDialogElement = relatedElement?.closest('.overlay, [role="dialog"]');
+
+			// Only auto-restore focus when terminal tab is active, stack depth is 1, and not in dialog
+			if (active && focusStack && focusStack.depth === 1 && !isDialogElement) {
 				// Clear any existing timeout
 				if (blurTimeout !== null) {
 					clearTimeout(blurTimeout);

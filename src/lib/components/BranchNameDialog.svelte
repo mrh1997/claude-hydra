@@ -12,6 +12,11 @@
 	let isPushed = false; // Track whether we've pushed to focus stack
 	const dispatch = createEventDispatcher();
 
+	// Immediately focus input when it binds and dialog is shown
+	$: if (show && inputElement) {
+		inputElement.focus();
+	}
+
 	// Clear input and push/pop focus callback when dialog is shown/hidden
 	$: if (show && focusStack && inputElement && !isPushed) {
 		branchName = '';
