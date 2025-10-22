@@ -8,16 +8,21 @@ Please perform the following steps:
 2. If there are uncommitted changes:
    - Create a temporary commit with `git add . && git commit -m "WIP: temporary commit for rebase"`
    - Note that we need to restore these changes later
-3. base branch is stored in environment variable CLAUDE_HYDRA_BASE_BRANCH
-4. Run `git rebase <base-branch>` to rebase the current branch
-5. If conflicts occur:
-   - Analyse all commits (diffs and commit messages) between the common base commit and the current branch / the common base commit and the base branch
-   - Read the conflicted files
-   - Analyze the conflicts and resolve them automatically by choosing the appropriate version or merging both
-   - Use `git add <resolved-files>` to mark conflicts as resolved
-   - Run `git rebase --continue` to continue the rebase
-   - Repeat until rebase completes
-6. If there was a temporary commit created in step 2:
+3. Get the current branch name with `git branch --show-current`
+4. Get the base branch and the main worktree with `git worktree list` (see first entry)
+5. Rebase the current branch onto the base branch:
+   - Run `git rebase <base-branch>`
+   - If conflicts occur:
+     - Analyse all commits (diffs and commit messages) between the common base commit and the current branch / the common base commit and the base branch
+     - Read the conflicted files
+     - Analyze the conflicts and resolve them automatically
+     - Use `git add <resolved-files>` to mark as resolved
+     - Run `git rebase --continue`
+     - Repeat until rebase completes
+6. In the main worktree Fast-forward merge the rebased branch: `git merge --ff-only <current-branch>`
+
+Execute these steps without asking for confirmation. Handle all conflicts automatically.
+7. If there was a temporary commit created in step 2:
    - Run `git reset HEAD~1` to undo the temporary commit while keeping the changes in the working tree
 
 Execute these steps now without asking for confirmation. Handle all conflicts automatically.
