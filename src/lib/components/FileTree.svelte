@@ -4,6 +4,7 @@
 	import CreateFileDialog from './CreateFileDialog.svelte';
 	import type { GitBackend } from '$lib/GitBackend';
 	import type { FocusStack } from '$lib/FocusStack';
+	import { mdiChevronRight, mdiDeleteOutline, mdiPlus } from '@mdi/js';
 
 	export let files: FileInfo[] | null;
 	export let active: boolean = false;
@@ -258,32 +259,14 @@
 	/**
 	 * Render tree recursively
 	 */
-	function renderTree(nodes: TreeNode[], depth: number = 0, parentPath: string = ''): Array<{ node: TreeNode; depth: number; isAddEntry?: boolean; addParentPath?: string }> {
-		const result: Array<{ node: TreeNode; depth: number; isAddEntry?: boolean; addParentPath?: string }> = [];
+	function renderTree(nodes: TreeNode[], depth: number = 0, parentPath: string = ''): Array<{ node: TreeNode; depth: number }> {
+		const result: Array<{ node: TreeNode; depth: number }> = [];
 		for (const node of nodes) {
 			result.push({ node, depth });
 			// Only render children if directory is expanded
 			if (node.isDirectory && node.children.length > 0 && isExpanded(node.path)) {
 				result.push(...renderTree(node.children, depth + 1, node.path));
 			}
-			// Add "+ (add entry)" item after each directory (if worktree and expanded)
-			if (isWorktree && node.isDirectory && isExpanded(node.path)) {
-				result.push({
-					node: { name: '', path: '', isDirectory: false, status: 'unchanged', children: [] },
-					depth: depth + 1,
-					isAddEntry: true,
-					addParentPath: node.path
-				});
-			}
-		}
-		// Add "+ (add entry)" item at root level
-		if (depth === 0 && isWorktree) {
-			result.push({
-				node: { name: '', path: '', isDirectory: false, status: 'unchanged', children: [] },
-				depth: 0,
-				isAddEntry: true,
-				addParentPath: ''
-			});
 		}
 		return result;
 	}
@@ -328,6 +311,11 @@
 	 * Handle add entry click
 	 */
 	function handleAddClick(parentPath: string) {
+		// Auto-expand the directory if it's collapsed
+		if (parentPath && !isExpanded(parentPath)) {
+			expandedDirs.set(parentPath, true);
+			expandedDirs = expandedDirs; // Trigger reactivity
+		}
 		createParentPath = parentPath;
 		createErrorMessage = '';
 		showCreateDialog = true;
@@ -423,52 +411,73 @@
 	<div class="file-list">
 		{#if flatTree.length > 0}
 			{#each flatTree as item}
-				{#if item.isAddEntry}
-					<!-- Add entry button -->
-					<div
-						class="file-row add-entry"
-						style="padding-left: {item.depth * 16 + 8}px"
-						on:click={() => handleAddClick(item.addParentPath || '')}
-						role="button"
-						tabindex="0"
-					>
+				<!-- Regular file/directory row -->
+				<div
+					class="file-row {getStatusColor(item.node.status)}"
+					class:directory={item.node.isDirectory}
+					class:file={!item.node.isDirectory}
+					class:selected={!item.node.isDirectory && item.node.path === selectedPath}
+					style="padding-left: {item.depth * 16 + 8}px"
+					on:click={() => handleRowClick(item.node)}
+					on:mouseenter={() => hoveredPath = item.node.path}
+					on:mouseleave={() => hoveredPath = null}
+					role="button"
+					tabindex="0"
+				>
+					{#if item.node.isDirectory}
+						<svg class="icon chevron" class:expanded={isExpanded(item.node.path)} viewBox="0 0 24 24">
+							<path d={mdiChevronRight} />
+						</svg>
+					{:else}
 						<span class="arrow-spacer"></span>
-						<span class="add-entry-text">+ (add entry)</span>
-					</div>
-				{:else}
-					<!-- Regular file/directory row -->
-					<div
-						class="file-row {getStatusColor(item.node.status)}"
-						class:directory={item.node.isDirectory}
-						class:file={!item.node.isDirectory}
-						class:selected={!item.node.isDirectory && item.node.path === selectedPath}
-						style="padding-left: {item.depth * 16 + 8}px"
-						on:click={() => handleRowClick(item.node)}
-						on:mouseenter={() => hoveredPath = item.node.path}
-						on:mouseleave={() => hoveredPath = null}
-						role="button"
-						tabindex="0"
-					>
+					{/if}
+					<span class="file-name">{item.node.name}</span>
+					{#if isWorktree && hoveredPath === item.node.path}
 						{#if item.node.isDirectory}
-							<span class="arrow" class:expanded={isExpanded(item.node.path)}>▶</span>
-						{:else}
-							<span class="arrow-spacer"></span>
-						{/if}
-						<span class="file-name">{item.node.name}</span>
-						{#if isWorktree && hoveredPath === item.node.path}
 							<button
-								class="delete-button"
-								on:click|stopPropagation={() => handleDeleteClick(item.node)}
-								title="Delete"
+								class="add-button"
+								on:click|stopPropagation={() => handleAddClick(item.node.path)}
+								title="Add file or directory"
 							>
-								🗑️
+								<svg class="icon" viewBox="0 0 24 24">
+									<path d={mdiPlus} />
+								</svg>
 							</button>
 						{/if}
-					</div>
-				{/if}
+						<button
+							class="delete-button"
+							on:click|stopPropagation={() => handleDeleteClick(item.node)}
+							title="Delete"
+						>
+							<svg class="icon" viewBox="0 0 24 24">
+								<path d={mdiDeleteOutline} />
+							</svg>
+						</button>
+					{/if}
+				</div>
 			{/each}
 		{:else}
-			<div class="empty-message">No files to display</div>
+			<div class="empty-message">No files modified</div>
+		{/if}
+		{#if isWorktree}
+			<div
+				class="root-add-row"
+				style="padding-left: 8px"
+				on:click={() => handleAddClick('')}
+				role="button"
+				tabindex="0"
+			>
+				<button
+					class="root-add-button"
+					on:click|stopPropagation={() => handleAddClick('')}
+					title="Add file or directory at root level"
+				>
+					<svg class="icon" viewBox="0 0 24 24">
+						<path d={mdiPlus} />
+					</svg>
+				</button>
+				<span class="root-add-text">&lt;create file&gt;</span>
+			</div>
 		{/if}
 	</div>
 
@@ -560,53 +569,95 @@
 		background-color: #094771;
 	}
 
-	.file-row.add-entry {
-		color: #888888;
-		cursor: pointer;
-		font-style: italic;
-	}
-
-	.file-row.add-entry:hover {
-		color: #0dbc79;
-		background-color: #2a2a2a;
-	}
-
-	.add-entry-text {
-		user-select: none;
-	}
-
-	.delete-button {
-		margin-left: auto;
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0 4px;
-		font-size: 14px;
-		opacity: 0.7;
-		transition: opacity 0.2s;
+	.icon {
+		width: 16px;
+		height: 16px;
+		fill: currentColor;
 		flex-shrink: 0;
 	}
 
-	.delete-button:hover {
-		opacity: 1;
-	}
-
-	.arrow {
-		display: inline-block;
-		width: 14px;
+	.chevron {
 		margin-right: 4px;
-		font-size: 10px;
 		transition: transform 0.2s ease;
 		transform-origin: center;
 	}
 
-	.arrow.expanded {
+	.chevron.expanded {
 		transform: rotate(90deg);
+	}
+
+	.delete-button,
+	.add-button {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0 4px;
+		opacity: 0.7;
+		transition: opacity 0.2s;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		color: #cccccc;
+	}
+
+	.delete-button:hover,
+	.add-button:hover {
+		opacity: 1;
+	}
+
+	.add-button {
+		margin-left: 4px;
+	}
+
+	.delete-button {
+		margin-left: auto;
+	}
+
+	.root-add-row {
+		display: flex;
+		align-items: center;
+		padding: 2px 0;
+		line-height: 1.6;
+		cursor: pointer;
+	}
+
+	.root-add-row:hover {
+		background-color: #2a2a2a;
+	}
+
+	.root-add-row:hover .root-add-button,
+	.root-add-row:hover .root-add-text {
+		opacity: 1;
+		color: #0dbc79;
+	}
+
+	.root-add-button {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		opacity: 0.7;
+		transition: opacity 0.2s, color 0.2s;
+		display: flex;
+		align-items: center;
+		color: #888888;
+		width: 16px;
+		margin-right: 4px;
+	}
+
+	.root-add-text {
+		user-select: none;
+		color: #888888;
+		font-family: 'Consolas', 'Courier New', monospace;
+		font-size: 12px;
+		font-style: italic;
+		opacity: 0.7;
+		transition: opacity 0.2s, color 0.2s;
 	}
 
 	.arrow-spacer {
 		display: inline-block;
-		width: 14px;
+		width: 16px;
 		margin-right: 4px;
 	}
 
