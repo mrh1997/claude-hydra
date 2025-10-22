@@ -611,6 +611,10 @@
 				if (diffViewerComponent && lastDiffViewerState) {
 					diffViewerComponent.restorePosition(lastDiffViewerState.position);
 				}
+				// Activate focus stack to ensure cursor is visible
+				if (focusStack) {
+					focusStack.activate();
+				}
 			}, 100);
 		} else if (files && files.length > 0) {
 			// No previous state - open first non-ignored file alphabetically
@@ -621,6 +625,12 @@
 
 			if (sortedFiles.length > 0) {
 				openFile(sortedFiles[0]);
+				// Activate focus stack after opening file
+				setTimeout(() => {
+					if (focusStack) {
+						focusStack.activate();
+					}
+				}, 100);
 			}
 		}
 	}
@@ -649,6 +659,10 @@
 					} else {
 						diffViewerComponent.navigateToLast();
 					}
+				}
+				// Activate focus stack to ensure cursor is visible
+				if (focusStack) {
+					focusStack.activate();
 				}
 			}, 100);
 		}
