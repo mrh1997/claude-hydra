@@ -300,12 +300,12 @@
 
 			// Wait a bit for operations to complete, then close tab
 			setTimeout(() => {
-				terminals.removeTab(pendingCloseTabId!);
+				terminals.removeTab(pendingCloseTabId!, false);
 				pendingCloseTabId = null;
 			}, 500);
 		} else {
 			// No session, just close
-			terminals.removeTab(pendingCloseTabId);
+			terminals.removeTab(pendingCloseTabId, false);
 			pendingCloseTabId = null;
 		}
 	}
