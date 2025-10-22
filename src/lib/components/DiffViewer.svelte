@@ -7,7 +7,6 @@
 	export let fileName: string = '';
 	export let language: string = 'plaintext';
 	export let active: boolean = false;
-	export let width: number = 350; // Width of the file tree panel
 	export let commitId: string | null = null; // null = working tree, string = historical commit
 	export let focusStack: FocusStack;
 	export let forceUpdate: boolean = false; // Force update even if content doesn't match editor
@@ -416,7 +415,7 @@
 
 <svelte:window on:keydown={handleKeyDown} />
 
-<div class="diff-viewer" class:hidden={!active} style="width: calc(100% - {width + 4}px)">
+<div class="diff-viewer" class:hidden={!active} style="width: 100%">
 	<div class="diff-header">
 		<button class="close-button" on:click={handleClose} title="Close (ESC)">×</button>
 		<span class="file-name">{fileName}{isDirty ? ' *' : ''}</span>

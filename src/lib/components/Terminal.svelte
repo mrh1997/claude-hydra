@@ -738,7 +738,6 @@
 			fileName={diffFileName}
 			language={diffLanguage}
 			active={showDiffViewer && active}
-			width={commitListWidth}
 			commitId={diffCommitId}
 			{focusStack}
 			bind:forceUpdate={forceNextDiffUpdate}
