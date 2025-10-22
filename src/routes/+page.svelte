@@ -96,6 +96,58 @@
 		});
 	}
 
+	// Helper: Get terminals sorted by repository order, alphabetically within each repo
+	function getSortedTerminals() {
+		return $repositories.flatMap(repo =>
+			$terminals.filter(t => t.repoPath === repo.path)
+				.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+		);
+	}
+
+	// Helper: Scroll a tab into view
+	function scrollTabIntoView(tabId: string) {
+		setTimeout(() => {
+			const tabElement = document.querySelector(`[data-tab-id="${tabId}"]`);
+			if (tabElement) {
+				tabElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+			}
+		}, 0);
+	}
+
+	// Helper: Navigate to previous/next tab
+	function navigateTab(direction: 'forward' | 'backward', filterReady: boolean) {
+		const sortedTerminals = getSortedTerminals();
+		const currentIndex = sortedTerminals.findIndex(t => t.active);
+
+		if (currentIndex === -1 || sortedTerminals.length === 0) return;
+
+		// Build search order based on direction
+		let searchOrder;
+		if (direction === 'forward') {
+			// Search forward from current + 1, then wrap around to beginning
+			searchOrder = [
+				...sortedTerminals.slice(currentIndex + 1),
+				...sortedTerminals.slice(0, currentIndex)
+			];
+		} else {
+			// Search backward from current - 1, then wrap around to end
+			searchOrder = [
+				...sortedTerminals.slice(0, currentIndex).reverse(),
+				...sortedTerminals.slice(currentIndex + 1).reverse()
+			];
+		}
+
+		// Find target tab (filter by ready state if requested)
+		const targetTab = filterReady
+			? searchOrder.find(tab => tab.state === 'ready')
+			: searchOrder[0];
+
+		if (targetTab) {
+			terminals.setActiveTab(targetTab.id);
+			scrollTabIntoView(targetTab.id);
+		}
+	}
+
 	function establishManagementConnection() {
 		// Establish management connection
 		managementWs = new WebSocket(`ws://localhost:${managementPort}`);
@@ -177,36 +229,21 @@
 			// Alt-X: Switch to next ready terminal
 			if (matchesShortcut(event, SHORTCUTS.NEXT_TAB)) {
 				event.preventDefault();
+				navigateTab('forward', true);
+				return;
+			}
 
-				// Build tab order matching visual display (by repository order, alphabetically within each repo)
-				const sortedTerminals = $repositories.flatMap(repo =>
-					$terminals.filter(t => t.repoPath === repo.path)
-						.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
-				);
+			// Alt-Up: Go to previous tab (ignoring state)
+			if (matchesShortcut(event, SHORTCUTS.PREV_TAB)) {
+				event.preventDefault();
+				navigateTab('backward', false);
+				return;
+			}
 
-				const currentIndex = sortedTerminals.findIndex(t => t.active);
-				if (currentIndex === -1 || sortedTerminals.length === 0) return;
-
-				// Search for next ready tab, going DOWN the list (forward through sorted array)
-				// If none found below, wrap around and search from top to current
-				const searchOrder = [
-					...sortedTerminals.slice(currentIndex + 1),
-					...sortedTerminals.slice(0, currentIndex)
-				];
-
-				const nextReadyTab = searchOrder.find(tab => tab.state === 'ready');
-
-				if (nextReadyTab) {
-					terminals.setActiveTab(nextReadyTab.id);
-
-					// Scroll the tab into view
-					setTimeout(() => {
-						const tabElement = document.querySelector(`[data-tab-id="${nextReadyTab.id}"]`);
-						if (tabElement) {
-							tabElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-						}
-					}, 0);
-				}
+			// Alt-Down: Go to next tab (ignoring state)
+			if (matchesShortcut(event, SHORTCUTS.NEXT_TAB_SIMPLE)) {
+				event.preventDefault();
+				navigateTab('forward', false);
 				return;
 			}
 

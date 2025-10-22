@@ -17,6 +17,20 @@ export const SHORTCUTS = {
 		shiftKey: false,
 		description: 'Next tab (Alt-X)'
 	} as KeyboardShortcut,
+	PREV_TAB: {
+		key: 'ArrowUp',
+		altKey: true,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Previous tab (Alt-Up)'
+	} as KeyboardShortcut,
+	NEXT_TAB_SIMPLE: {
+		key: 'ArrowDown',
+		altKey: true,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Next tab (Alt-Down)'
+	} as KeyboardShortcut,
 	NEW_TAB: {
 		key: 'c',
 		altKey: true,
@@ -79,6 +93,8 @@ export function matchesShortcut(event: KeyboardEvent, shortcut: KeyboardShortcut
 export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 	return (
 		matchesShortcut(event, SHORTCUTS.NEXT_TAB) ||
+		matchesShortcut(event, SHORTCUTS.PREV_TAB) ||
+		matchesShortcut(event, SHORTCUTS.NEXT_TAB_SIMPLE) ||
 		matchesShortcut(event, SHORTCUTS.NEW_TAB) ||
 		matchesShortcut(event, SHORTCUTS.CLOSE_TAB) ||
 		matchesShortcut(event, SHORTCUTS.OPEN_REPOSITORY) ||
