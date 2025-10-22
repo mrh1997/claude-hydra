@@ -266,6 +266,7 @@
 		flex-wrap: wrap;
 		gap: 4px;
 		margin-top: 2px;
+		margin-left: calc(0.8em + 8px); /* Align with tab title, not state indicator */
 	}
 
 	.badge {
