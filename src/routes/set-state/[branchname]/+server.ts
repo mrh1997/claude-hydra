@@ -1,15 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { sendStateUpdate, sendReadyStateWithGitStatus, sendCloseTabRequest } from '$lib/server/websocket-manager';
+import { sendStateUpdate, sendReadyStateWithGitStatus, sendCloseTabRequest, sendWaituserRequest } from '$lib/server/websocket-manager';
 import { getRepositoryRegistry } from '$lib/server/session-manager-instance';
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { branchname } = params;
-	const { state } = await request.json();
+	const body = await request.json();
+	const { state, text, commandline } = body;
 
 	// Validate state
-	if (state !== 'ready' && state !== 'running' && state !== 'close') {
+	if (state !== 'ready' && state !== 'running' && state !== 'close' && state !== 'waituser') {
 		return json({ error: 'Invalid state' }, { status: 400 });
+	}
+
+	// Validate waituser parameters
+	if (state === 'waituser' && !commandline) {
+		return json({ error: 'waituser state requires commandline parameter' }, { status: 400 });
 	}
 
 	// Send state update to the WebSocket connection for this branch
@@ -44,6 +50,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		} catch (error: any) {
 			return json({ error: `Failed to get git status: ${error.message}` }, { status: 500 });
 		}
+	} else if (state === 'waituser') {
+		// For 'waituser' state, send waituser request with text and commandline
+		sent = sendWaituserRequest(branchname, text || commandline, commandline);
 	} else {
 		// For 'running' state, just send state update
 		sent = sendStateUpdate(branchname, state);

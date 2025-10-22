@@ -578,6 +578,43 @@ function initWebSocketServer() {
 						}
 						break;
 
+					case 'executeWaituser':
+						// Execute waituser command
+						const waituserSessionId = data.sessionId || sessionId;
+						if (waituserSessionId && data.commandline) {
+							try {
+								const sessionManager = repositoryRegistry.getRepositoryBySessionId(waituserSessionId);
+								if (sessionManager) {
+									// Get worktree path
+									const allSessions = sessionManager.getAllSessions();
+									const sessionInfo = allSessions.get(waituserSessionId);
+									if (sessionInfo) {
+										// Execute command in worktree
+										try {
+											execSync(data.commandline, {
+												cwd: sessionInfo.worktreePath,
+												encoding: 'utf8',
+												stdio: 'pipe'
+											});
+											// Success - no need to send anything back
+										} catch (error: any) {
+											// Command failed - send error to frontend
+											const output = (error.stdout || '') + (error.stderr || '');
+											ws.send(JSON.stringify({
+												type: 'waituserError',
+												output: output || error.message || 'Command execution failed'
+											}));
+										}
+									}
+								}
+							} catch (error: any) {
+								const errorMessage = error.message || String(error);
+								console.error('Failed to execute waituser command:', errorMessage);
+								ws.send(JSON.stringify({ type: 'waituserError', output: errorMessage }));
+							}
+						}
+						break;
+
 					case 'destroy':
 						// Destroy terminal session
 						if (sessionId) {

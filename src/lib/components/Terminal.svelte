@@ -6,6 +6,7 @@
 	import CommitList from './CommitList.svelte';
 	import Splitter from './Splitter.svelte';
 	import DiffViewer from './DiffViewer.svelte';
+	import WaituserErrorDialog from './WaituserErrorDialog.svelte';
 	import { shouldBlockFromTerminal } from '$lib/shortcuts';
 	import { FocusStack } from '$lib/FocusStack';
 
@@ -47,6 +48,13 @@
 	let modifiedFilesList: string[] = []; // List of modified files
 	let currentFileIndex = -1; // Index of currently open file in modifiedFilesList
 	let lastDiffViewerState: { fileName: string; position: any } | null = null; // State to restore with Alt+F
+
+	// Waituser state
+	let showWaituserBox = false;
+	let waituserText = '';
+	let waituserCommandline = '';
+	let showWaituserErrorDialog = false;
+	let waituserErrorOutput = '';
 
 	onMount(async () => {
 		// Initialize focus stack and register with store
@@ -298,6 +306,19 @@
 						diffModifiedContent = message.modified || '';
 						diffLanguage = getLanguageFromFileName(diffFileName);
 						showDiffViewer = true;
+						break;
+
+					case 'waituser':
+						// Show waituser box with text and commandline
+						waituserText = message.text;
+						waituserCommandline = message.commandline;
+						showWaituserBox = true;
+						break;
+
+					case 'waituserError':
+						// Show error dialog with command output
+						waituserErrorOutput = message.output;
+						showWaituserErrorDialog = true;
 						break;
 
 					case 'error':
@@ -674,30 +695,70 @@
 		};
 		return languageMap[ext] || 'plaintext';
 	}
+
+	/**
+	 * Handle F9 key press - execute waituser command
+	 */
+	export function handleWaituserExecute() {
+		if (!showWaituserBox || !waituserCommandline) {
+			return;
+		}
+
+		// Hide the waituser box
+		showWaituserBox = false;
+
+		// Send execute command to backend
+		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+			ws.send(JSON.stringify({
+				type: 'executeWaituser',
+				sessionId,
+				commandline: waituserCommandline
+			}));
+		}
+
+		// Clear state
+		waituserText = '';
+		waituserCommandline = '';
+	}
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
-	<div bind:this={terminalElement} class="terminal" style="width: calc(100% - {commitListWidth + 4}px)" class:hidden={showDiffViewer}></div>
-	<DiffViewer
-		bind:this={diffViewerComponent}
-		originalContent={diffOriginalContent}
-		modifiedContent={diffModifiedContent}
-		fileName={diffFileName}
-		language={diffLanguage}
-		active={showDiffViewer && active}
-		width={commitListWidth}
-		commitId={diffCommitId}
-		{focusStack}
-		bind:forceUpdate={forceNextDiffUpdate}
-		on:close={handleCloseDiff}
-		on:save={handleSaveFile}
-		on:discard={handleDiscardFile}
-		on:nextDiff={handleNextDiff}
-		on:prevDiff={handlePrevDiff}
-	/>
+	<div class="terminal-area" style="width: calc(100% - {commitListWidth + 4}px)">
+		<div bind:this={terminalElement} class="terminal" class:hidden={showDiffViewer}></div>
+		<DiffViewer
+			bind:this={diffViewerComponent}
+			originalContent={diffOriginalContent}
+			modifiedContent={diffModifiedContent}
+			fileName={diffFileName}
+			language={diffLanguage}
+			active={showDiffViewer && active}
+			width={commitListWidth}
+			commitId={diffCommitId}
+			{focusStack}
+			bind:forceUpdate={forceNextDiffUpdate}
+			on:close={handleCloseDiff}
+			on:save={handleSaveFile}
+			on:discard={handleDiscardFile}
+			on:nextDiff={handleNextDiff}
+			on:prevDiff={handlePrevDiff}
+		/>
+		{#if showWaituserBox}
+			<div class="waituser-box">
+				<div class="waituser-text">{waituserText}</div>
+				<div class="waituser-hint">Press F9 to start</div>
+			</div>
+		{/if}
+	</div>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
 	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} selectedPath={showDiffViewer ? diffFileName : null} />
 </div>
+
+<WaituserErrorDialog
+	show={showWaituserErrorDialog}
+	output={waituserErrorOutput}
+	{focusStack}
+	on:close={() => { showWaituserErrorDialog = false; }}
+/>
 
 <style>
 	.terminal-container {
@@ -715,8 +776,40 @@
 		pointer-events: none;
 	}
 
-	.terminal {
+	.terminal-area {
 		height: 100%;
 		flex-shrink: 0;
+		position: relative;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.terminal {
+		flex: 1;
+		overflow: hidden;
+	}
+
+	.waituser-box {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		background-color: #4a148c;
+		color: #ffffff;
+		padding: 12px 16px;
+		box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+		z-index: 100;
+	}
+
+	.waituser-text {
+		font-size: 14px;
+		font-weight: 500;
+		margin-bottom: 4px;
+	}
+
+	.waituser-hint {
+		font-size: 10px;
+		color: #e1bee7;
+		font-style: italic;
 	}
 </style>

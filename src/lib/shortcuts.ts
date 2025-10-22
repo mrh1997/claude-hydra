@@ -79,6 +79,13 @@ export const SHORTCUTS = {
 		ctrlKey: false,
 		shiftKey: false,
 		description: 'Return to diff viewer (Alt+F)'
+	} as KeyboardShortcut,
+	EXECUTE_WAITUSER: {
+		key: 'F9',
+		altKey: false,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Execute waituser command (F9)'
 	} as KeyboardShortcut
 };
 
@@ -108,6 +115,7 @@ export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 		matchesShortcut(event, SHORTCUTS.OPEN_REPOSITORY) ||
 		matchesShortcut(event, SHORTCUTS.NEXT_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.PREV_DIFF) ||
-		matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF)
+		matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF) ||
+		matchesShortcut(event, SHORTCUTS.EXECUTE_WAITUSER)
 	);
 }

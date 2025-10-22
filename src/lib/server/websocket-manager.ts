@@ -109,3 +109,12 @@ export function sendCloseTabRequest(branchName: string): boolean {
 	}
 	return false;
 }
+
+export function sendWaituserRequest(branchName: string, text: string, commandline: string): boolean {
+	const ws = branchConnections.get(branchName);
+	if (ws && ws.readyState === ws.OPEN) {
+		ws.send(JSON.stringify({ type: 'waituser', text, commandline }));
+		return true;
+	}
+	return false;
+}

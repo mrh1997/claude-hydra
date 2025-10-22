@@ -6,8 +6,22 @@ import https from 'https';
 
 // Get state from command line argument
 const state = process.argv[2];
-if (!state || !['ready', 'running', 'close'].includes(state)) {
+if (!state || !['ready', 'running', 'close', 'waituser'].includes(state)) {
   process.exit(1);
+}
+
+// For waituser state, get additional parameters
+let text, commandline;
+if (state === 'waituser') {
+  commandline = process.argv[3]; // First parameter: command to execute
+  text = process.argv[4]; // Second parameter: optional display text
+  if (!commandline) {
+    process.exit(1);
+  }
+  // If text is not provided, use commandline as display text
+  if (!text) {
+    text = commandline;
+  }
 }
 
 // Get git branch name
@@ -53,5 +67,12 @@ req.on('error', () => {});
 req.setTimeout(100);
 req.socket?.unref();
 
-req.write(JSON.stringify({ state }));
+// Build request body based on state
+const requestBody = { state };
+if (state === 'waituser') {
+  requestBody.text = text;
+  requestBody.commandline = commandline;
+}
+
+req.write(JSON.stringify(requestBody));
 req.end();

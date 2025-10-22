@@ -323,6 +323,19 @@
 				}
 				return;
 			}
+
+			// F9: Execute waituser command
+			if (matchesShortcut(event, SHORTCUTS.EXECUTE_WAITUSER)) {
+				event.preventDefault();
+				const activeTab = $terminals.find(t => t.active);
+				if (activeTab) {
+					const terminalComponent = terminalComponents[activeTab.id];
+					if (terminalComponent && terminalComponent.handleWaituserExecute) {
+						terminalComponent.handleWaituserExecute();
+					}
+				}
+				return;
+			}
 		};
 
 		// Handle window/tab close
