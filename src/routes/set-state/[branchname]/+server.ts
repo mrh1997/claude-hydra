@@ -42,6 +42,21 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 			// Only send close request if there are no uncommitted changes and no unmerged commits
 			if (!gitStatus.hasUncommittedChanges && !gitStatus.hasUnmergedCommits) {
+				// Check if base branch has changed (merge likely occurred)
+				// This will update the stored base branch commit ID
+				const baseBranchChanged = sessionManager.checkAndUpdateBaseBranch();
+
+				if (baseBranchChanged) {
+					// Base branch changed - broadcast git status to all remaining tabs
+					// so they show as outdated before we close this tab
+					console.log('Base branch changed after merge - broadcasting git status to all tabs');
+					const { broadcastGitStatusToAll } = await import('$lib/server/websocket-manager');
+					broadcastGitStatusToAll(
+						sessionManager.getAllSessions(),
+						(sid) => sessionManager.getGitStatus(sid)
+					);
+				}
+
 				sent = sendCloseTabRequest(branchname);
 			} else {
 				// Don't close if there are uncommitted changes or unmerged commits
