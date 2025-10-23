@@ -19,10 +19,7 @@ Please perform the following steps:
      - Use `git add <resolved-files>` to mark as resolved
      - Run `git rebase --continue`
      - Repeat until rebase completes
-6. In the main worktree Fast-forward merge the rebased branch: `git merge --ff-only <current-branch>`
-
-Execute these steps without asking for confirmation. Handle all conflicts automatically.
-7. If there was a temporary commit created in step 2:
+6. If there was a temporary commit created in step 2:
    - Run `git reset HEAD~1` to undo the temporary commit while keeping the changes in the working tree
 
-Execute these steps now without asking for confirmation. Handle all conflicts automatically.
+Execute these steps without asking for confirmation. Handle all conflicts automatically.
