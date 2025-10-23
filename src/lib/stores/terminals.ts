@@ -2,7 +2,8 @@ import { writable } from 'svelte/store';
 import { FocusStack } from '$lib/FocusStack';
 
 export interface CommitInfo {
-	hash: string;
+	hash: string;          // Full abbreviated hash (7-8 chars) for git operations
+	displayHash: string;   // Short hash (4 chars) for UI display
 	timestamp: number;
 	message: string;
 	fullMessage: string;

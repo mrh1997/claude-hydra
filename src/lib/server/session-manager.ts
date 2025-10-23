@@ -719,7 +719,8 @@ export class SessionManager {
 				const fullMessage = parts[3] || message;
 
 				commits.push({
-					hash: hash.substring(0, 4), // First 4 characters of hash
+					hash: hash,                    // Full abbreviated hash (7-8 chars) for git operations
+					displayHash: hash.substring(0, 4), // First 4 characters for UI display
 					timestamp: parseInt(timestampStr, 10),
 					message,
 					fullMessage: fullMessage.trim()
@@ -1146,21 +1147,39 @@ export class SessionManager {
 					modified = '';
 				}
 			} else {
-				// Specific commit: compare commit^ vs commit
+				// Specific commit: compare commit's parent vs commit
+				// Use git rev-list to get parent SHA (avoids ^ which causes issues on Windows cmd)
 				try {
-					// Get file content from commit's parent (using cat-file to preserve line endings)
-					original = execSync(`git cat-file blob ${commitId}^:${filePath}`, {
+					// Get parent commit using rev-list (works cross-platform)
+					const parentSha = execSync(`git rev-list --parents -n 1 ${commitId}`, {
 						cwd: session.worktreePath,
 						encoding: 'utf8',
 						stdio: 'pipe'
-					});
+					}).trim().split(' ')[1]; // Format: "commit_sha parent_sha"
+
+					if (parentSha) {
+						try {
+							// Get file content from commit's parent
+							original = execSync(`git cat-file blob ${parentSha}:${filePath}`, {
+								cwd: session.worktreePath,
+								encoding: 'utf8',
+								stdio: 'pipe'
+							});
+						} catch (error) {
+							// File might be new in this commit, so original is empty
+							original = '';
+						}
+					} else {
+						// No parent commit (initial commit)
+						original = '';
+					}
 				} catch (error) {
-					// File might be new in this commit, so original is empty
+					// Failed to get parent commit SHA
 					original = '';
 				}
 
 				try {
-					// Get file content from commit (using cat-file to preserve line endings)
+					// Get file content from commit
 					modified = execSync(`git cat-file blob ${commitId}:${filePath}`, {
 						cwd: session.worktreePath,
 						encoding: 'utf8',
@@ -1305,7 +1324,8 @@ export interface SessionInfo {
 }
 
 export interface CommitInfo {
-	hash: string;
+	hash: string;          // Full abbreviated hash (7-8 chars) for git operations
+	displayHash: string;   // Short hash (4 chars) for UI display
 	timestamp: number;
 	message: string;
 	fullMessage: string;

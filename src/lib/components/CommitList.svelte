@@ -135,7 +135,7 @@
 					role="button"
 					tabindex="0"
 				>
-					<span class="commit-hash">{commit.hash}</span>
+					<span class="commit-hash">{commit.displayHash}</span>
 					<span class="commit-time">{formatTimestamp(commit.timestamp)}</span>
 					<span class="commit-message">{commit.message}</span>
 				</div>
