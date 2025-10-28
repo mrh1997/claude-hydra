@@ -15,6 +15,7 @@
 	export let branchName: string;
 	export let repoPath: string; // Repository path this terminal belongs to
 	export let adoptExisting: boolean = false;
+	export let derivedFromBranch: string; // The base branch this worktree was derived from
 
 	const dispatch = createEventDispatcher();
 	const websocketPort = getContext<number>('websocketPort');
@@ -216,8 +217,14 @@
 
 		ws.onopen = () => {
 			console.log('WebSocket connected');
-			// Request new terminal session with repository path and branch name
-			ws.send(JSON.stringify({ type: 'create', repoPath, branchName, adoptExisting }));
+			// Request new terminal session with repository path, branch name, and base branch
+			// Only include baseBranchName if derivedFromBranch is defined (for new terminals)
+			// When adoptExisting=true and derivedFromBranch is undefined, backend will read from git config
+			const message: any = { type: 'create', repoPath, branchName, adoptExisting };
+			if (derivedFromBranch !== undefined) {
+				message.baseBranchName = derivedFromBranch;
+			}
+			ws.send(JSON.stringify(message));
 		};
 
 		ws.onmessage = (event) => {
@@ -234,6 +241,10 @@
 					case 'created':
 						sessionId = message.sessionId;
 						terminals.setSessionId(terminalId, sessionId);
+						// Update derivedFromBranch if backend sent it back
+						if (message.baseBranchName) {
+							terminals.updateDerivedFromBranch(terminalId, message.baseBranchName);
+						}
 
 						// Create GitBackend instance for this session
 						gitBackend = new GitBackend(

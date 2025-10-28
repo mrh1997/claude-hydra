@@ -47,7 +47,12 @@
 				<div class="tab-content">
 					<div class="tab-header">
 						<span class="state-indicator" class:ready={tab.state === 'ready'} class:running={tab.state === 'running'}></span>
-						<span class="tab-title">{tab.title}</span>
+						<div class="tab-title-container">
+				<span class="tab-title">{tab.title}</span>
+				{#if tab.derivedFromBranch && tab.derivedFromBranch !== 'main' && tab.derivedFromBranch !== 'master'}
+					<span class="tab-subtitle" title="Derived from branch: {tab.derivedFromBranch}">from {tab.derivedFromBranch}</span>
+				{/if}
+			</div>
 						<button
 							class="close-btn"
 							on:click={(e) => onTabClose(tab.id, e)}
@@ -231,13 +236,30 @@
 		}
 	}
 
-	.tab-title {
+	.tab-title-container {
 		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		overflow: hidden;
+		min-width: 0;
+	}
+
+	.tab-title {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		color: #cccccc;
 		font-size: 13px;
+	}
+
+	.tab-subtitle {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: #888888;
+		font-size: 11px;
+		font-style: italic;
 	}
 
 	.close-btn {

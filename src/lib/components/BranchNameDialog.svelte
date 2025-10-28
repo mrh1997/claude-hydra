@@ -1,16 +1,30 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, getContext } from 'svelte';
 	import type { FocusStack } from '$lib/FocusStack';
 
 	export let show = false;
 	export let errorMessage = '';
 	export let focusStack: FocusStack | null = null;
+	export let repoPath: string; // Repository path to fetch branches from
+
+	const websocketPort = getContext<number>('websocketPort');
 
 	let branchName = '';
+	let baseBranchName = '';
+	let branches: string[] = [];
 	let inputElement: HTMLInputElement;
+	let baseBranchInputElement: HTMLInputElement;
 	let dialogElement: HTMLDivElement;
+	let dropdownElement: HTMLDivElement;
 	let isPushed = false; // Track whether we've pushed to focus stack
+	let showDropdown = false;
+	let selectedIndex = -1;
 	const dispatch = createEventDispatcher();
+
+	// Fetch branches when dialog is shown
+	$: if (show && repoPath) {
+		fetchBranches();
+	}
 
 	// Immediately focus input when it binds and dialog is shown
 	$: if (show && inputElement) {
@@ -20,7 +34,10 @@
 	// Clear input and push/pop focus callback when dialog is shown/hidden
 	$: if (show && focusStack && inputElement && !isPushed) {
 		branchName = '';
+		baseBranchName = '';
 		errorMessage = '';
+		showDropdown = false;
+		selectedIndex = -1;
 		focusStack.push(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -31,12 +48,16 @@
 		// Pop when dialog closes
 		focusStack.pop();
 		isPushed = false;
+		showDropdown = false;
 	}
 
 	// Fallback autofocus when focusStack is not available
 	$: if (show && !focusStack && inputElement) {
 		branchName = '';
+		baseBranchName = '';
 		errorMessage = '';
+		showDropdown = false;
+		selectedIndex = -1;
 		setTimeout(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -44,27 +65,117 @@
 		}, 50);
 	}
 
+	function fetchBranches() {
+		const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+
+		ws.onopen = () => {
+			ws.send(JSON.stringify({ type: 'listBranches', repoPath }));
+		};
+
+		ws.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			if (data.type === 'branchesListed') {
+				branches = data.branches || [];
+				// Set default base branch to the first branch (usually main or master)
+				if (branches.length > 0 && !baseBranchName) {
+					baseBranchName = branches.find(b => b === 'main' || b === 'master') || branches[0];
+				}
+			} else if (data.type === 'error') {
+				console.error('Failed to list branches:', data.error);
+			}
+			ws.close();
+		};
+
+		ws.onerror = () => {
+			console.error('WebSocket error while fetching branches');
+			ws.close();
+		};
+	}
+
 	function handleSubmit() {
-		const trimmed = branchName.trim();
-		if (!trimmed) {
+		const trimmedBranchName = branchName.trim();
+		const trimmedBaseBranch = baseBranchName.trim();
+		if (!trimmedBranchName) {
 			errorMessage = 'Branch name cannot be empty';
 			return;
 		}
-		dispatch('submit', trimmed);
+		if (!trimmedBaseBranch) {
+			errorMessage = 'Base branch cannot be empty';
+			return;
+		}
+		dispatch('submit', { branchName: trimmedBranchName, baseBranchName: trimmedBaseBranch });
 	}
 
 	function handleCancel() {
 		branchName = '';
+		baseBranchName = '';
 		errorMessage = '';
+		showDropdown = false;
 		dispatch('cancel');
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
+	function handleBranchNameKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			handleSubmit();
+			// Move to base branch input or submit if base branch already filled
+			if (baseBranchInputElement) {
+				baseBranchInputElement.focus();
+			}
 		} else if (event.key === 'Escape') {
 			handleCancel();
 		}
+	}
+
+	function handleBaseBranchKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			if (showDropdown && selectedIndex >= 0 && selectedIndex < branches.length) {
+				// Select the highlighted item
+				baseBranchName = branches[selectedIndex];
+				showDropdown = false;
+				selectedIndex = -1;
+			}
+			handleSubmit();
+		} else if (event.key === 'Escape') {
+			if (showDropdown) {
+				showDropdown = false;
+				selectedIndex = -1;
+			} else {
+				handleCancel();
+			}
+		} else if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (!showDropdown && branches.length > 0) {
+				showDropdown = true;
+				selectedIndex = 0;
+			} else if (selectedIndex < branches.length - 1) {
+				selectedIndex++;
+			}
+		} else if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (selectedIndex > 0) {
+				selectedIndex--;
+			}
+		}
+	}
+
+	function handleBaseBranchFocus() {
+		if (branches.length > 0) {
+			showDropdown = true;
+			selectedIndex = -1;
+		}
+	}
+
+	function handleBaseBranchBlur() {
+		// Delay hiding dropdown to allow click on dropdown item
+		setTimeout(() => {
+			showDropdown = false;
+			selectedIndex = -1;
+		}, 200);
+	}
+
+	function handleDropdownItemClick(branch: string) {
+		baseBranchName = branch;
+		showDropdown = false;
+		selectedIndex = -1;
 	}
 
 	function handleDialogKeydown(event: KeyboardEvent) {
@@ -100,15 +211,52 @@
 	<div class="overlay" on:click={handleCancel} role="presentation">
 		<div bind:this={dialogElement} class="dialog" on:click|stopPropagation on:keydown={handleDialogKeydown} role="dialog" aria-modal="true">
 			<h2>Create New Terminal</h2>
-			<p>Enter a branch name for the new worktree:</p>
 
-			<input
-				type="text"
-				bind:this={inputElement}
-				bind:value={branchName}
-				on:keydown={handleKeydown}
-				placeholder="e.g., feature-foo"
-			/>
+			<div class="form-group">
+				<label for="branch-name">Branch Name:</label>
+				<input
+					id="branch-name"
+					type="text"
+					bind:this={inputElement}
+					bind:value={branchName}
+					on:keydown={handleBranchNameKeydown}
+					placeholder="e.g., feature-foo"
+					autocomplete="off"
+				/>
+			</div>
+
+			<div class="form-group">
+				<label for="base-branch">Derive From Branch:</label>
+				<div class="input-container">
+					<input
+						id="base-branch"
+						type="text"
+						bind:this={baseBranchInputElement}
+						bind:value={baseBranchName}
+						on:keydown={handleBaseBranchKeydown}
+						on:focus={handleBaseBranchFocus}
+						on:blur={handleBaseBranchBlur}
+						placeholder="Select or type branch name"
+						autocomplete="off"
+					/>
+					{#if showDropdown && branches.length > 0}
+						<div class="dropdown" bind:this={dropdownElement}>
+							{#each branches as branch, index}
+								<div
+									class="dropdown-item"
+									class:selected={index === selectedIndex}
+									on:mousedown={() => handleDropdownItemClick(branch)}
+									on:mouseenter={() => selectedIndex = index}
+									role="option"
+									aria-selected={index === selectedIndex}
+								>
+									{branch}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
 
 			{#if errorMessage}
 				<div class="error">{errorMessage}</div>
@@ -173,6 +321,51 @@
 	input:focus {
 		outline: none;
 		border-color: #007acc;
+	}
+
+	.form-group {
+		margin-bottom: 16px;
+	}
+
+	label {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 13px;
+		color: #cccccc;
+		font-weight: 500;
+	}
+
+	.input-container {
+		position: relative;
+	}
+
+	.dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		background-color: #2d2d2d;
+		border: 1px solid #3e3e3e;
+		border-top: none;
+		border-radius: 0 0 3px 3px;
+		max-height: 200px;
+		overflow-y: auto;
+		z-index: 1001;
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.dropdown-item {
+		padding: 8px 12px;
+		cursor: pointer;
+		font-size: 14px;
+		color: #cccccc;
+		font-family: 'Consolas', monospace;
+	}
+
+	.dropdown-item:hover,
+	.dropdown-item.selected {
+		background-color: #094771;
+		color: #ffffff;
 	}
 
 	.error {

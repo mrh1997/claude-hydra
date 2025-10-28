@@ -124,7 +124,8 @@
 				// Create terminal tabs for each discovered worktree
 				for (const worktree of data.worktrees) {
 					const id = uuidv4();
-					terminals.addTab(id, repoPath, worktree.branchName, true); // adoptExisting = true
+					// When adopting existing, pass undefined for derivedFromBranch so backend reads from git config
+					terminals.addTab(id, repoPath, worktree.branchName, true, true, undefined);
 					onNewTab(id, repoPath, worktree.branchName);
 				}
 				ws.close();
@@ -163,7 +164,8 @@
 				// Create terminal tabs for each discovered worktree
 				for (const worktree of data.worktrees) {
 					const id = uuidv4();
-					terminals.addTab(id, repoPath, worktree.branchName, true); // adoptExisting = true
+					// When adopting existing, pass undefined for derivedFromBranch so backend reads from git config
+					terminals.addTab(id, repoPath, worktree.branchName, true, true, undefined);
 					onNewTab(id, repoPath, worktree.branchName);
 				}
 				ws.close();
@@ -188,10 +190,10 @@
 		dialogError = '';
 	}
 
-	function handleDialogSubmit(event: CustomEvent<string>) {
-		const branchName = event.detail;
+	function handleDialogSubmit(event: CustomEvent<{ branchName: string; baseBranchName: string }>) {
+		const { branchName, baseBranchName } = event.detail;
 		const id = uuidv4();
-		terminals.addTab(id, pendingRepoPath, branchName, false, !createTabInBackground);
+		terminals.addTab(id, pendingRepoPath, branchName, false, !createTabInBackground, baseBranchName);
 		onNewTab(id, pendingRepoPath, branchName);
 		showBranchDialog = false;
 		dialogError = '';
@@ -448,6 +450,7 @@
 <BranchNameDialog
 	bind:show={showBranchDialog}
 	bind:errorMessage={dialogError}
+	repoPath={pendingRepoPath}
 	focusStack={activeFocusStack}
 	on:submit={handleDialogSubmit}
 	on:cancel={handleDialogCancel}

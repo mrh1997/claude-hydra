@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import type { RepositoryRegistry } from '$lib/server/repository-registry';
+import type { SessionInfo } from '$lib/server/session-manager';
 import updateStateTemplate from '../../template/update-state.js?raw';
 import chCommitTemplate from '../../template/commands/ch-commit.md?raw';
 import chMergeTemplate from '../../template/commands/ch-merge.md?raw';
@@ -278,7 +279,7 @@ export class PtyManager {
 		return this.sessions.get(sessionId)?.branchName;
 	}
 
-	async createSession(repoPath: string, branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false): Promise<string> {
+	async createSession(repoPath: string, branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false, baseBranchName?: string): Promise<SessionInfo> {
 		const sessionId = uuidv4();
 
 		// Get or create SessionManager for this repository
@@ -288,7 +289,7 @@ export class PtyManager {
 		this.repositoryRegistry.registerSession(sessionId, repoPath);
 
 		// Create isolated git worktree session
-		const sessionInfo = await sessionManager.createSession(sessionId, branchName, adoptExisting);
+		const sessionInfo = await sessionManager.createSession(sessionId, branchName, adoptExisting, baseBranchName);
 
 		// Get the actual main repository root (not the worktree path)
 		// Use git-common-dir to get the main .git directory, then get its parent
@@ -312,10 +313,11 @@ export class PtyManager {
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();
 
-		// Prepare environment with CLAUDE_HYDRA_BASEURL
+		// Prepare environment with CLAUDE_HYDRA_BASEURL and CLAUDE_HYDRA_BASE_BRANCH
 		const env = {
 			...process.env,
-			CLAUDE_HYDRA_BASEURL: baseUrl
+			CLAUDE_HYDRA_BASEURL: baseUrl,
+			CLAUDE_HYDRA_BASE_BRANCH: sessionInfo.baseBranchName
 		} as { [key: string]: string };
 
 		// Prepare arguments: add --continue flag only when adopting existing session
@@ -370,7 +372,7 @@ export class PtyManager {
 		// Send initial newline to trigger Claude to start and display welcome message
 		ptyProcess.write('\r');
 
-		return sessionId;
+		return sessionInfo;
 	}
 
 	write(sessionId: string, data: string): void {

@@ -80,11 +80,12 @@ function initWebSocketServer() {
 
 							branchName = data.branchName;
 						const adoptExisting = data.adoptExisting || false;
+						const baseBranchName = data.baseBranchName; // Optional base branch to derive from
 
 						// Determine base URL for hooks to call back using actual HTTP port
 						const baseUrl = `http://localhost:${HTTP_PORT}`;
 
-						sessionId = await ptyManager.createSession(
+						const sessionInfo = await ptyManager.createSession(
 							data.repoPath,
 							data.branchName,
 							(sid, output) => {
@@ -100,8 +101,12 @@ function initWebSocketServer() {
 								}
 							},
 							baseUrl,
-							adoptExisting
+							adoptExisting,
+							baseBranchName
 						);
+
+						// Extract sessionId from sessionInfo
+						sessionId = sessionInfo.sessionId;
 
 						// Register this connection with the branch name
 						// At this point branchName is guaranteed to be non-null
@@ -122,7 +127,13 @@ function initWebSocketServer() {
 							}
 						}
 
-						ws.send(JSON.stringify({ type: 'created', sessionId, branchName }));
+						// Send session info back to frontend, including resolved baseBranchName
+					ws.send(JSON.stringify({
+						type: 'created',
+						sessionId,
+						branchName,
+						baseBranchName: sessionInfo.baseBranchName
+					}));
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
 							console.error('Failed to create session:', errorMessage);
@@ -574,6 +585,32 @@ function initWebSocketServer() {
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
 							console.error('Failed to discover worktrees:', errorMessage);
+							ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
+						}
+						break;
+
+					case 'listBranches':
+						try {
+							if (!data.repoPath) {
+								ws.send(JSON.stringify({ type: 'error', error: 'Repository path is required' }));
+								break;
+							}
+
+							// Get or create SessionManager for this repository
+							const sessionManager = repositoryRegistry.getOrCreateRepository(data.repoPath);
+
+							// List branches
+							const branches = sessionManager.listBranches();
+
+							// Send results back to client
+							ws.send(JSON.stringify({
+								type: 'branchesListed',
+								repoPath: data.repoPath,
+								branches
+							}));
+						} catch (error: any) {
+							const errorMessage = error.message || String(error);
+							console.error('Failed to list branches:', errorMessage);
 							ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
 						}
 						break;

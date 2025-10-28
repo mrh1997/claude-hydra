@@ -21,6 +21,7 @@ export interface TerminalTab {
 	title: string;
 	branchName: string;
 	repoPath: string; // Repository path this terminal belongs to
+	derivedFromBranch?: string; // The base branch this worktree was derived from (undefined when backend reads from git config)
 	active: boolean;
 	state: 'ready' | 'running';
 	adoptExisting: boolean;
@@ -35,14 +36,14 @@ function createTerminalsStore() {
 
 	return {
 		subscribe,
-		addTab: (id: string, repoPath: string, branchName: string, adoptExisting: boolean = false, activate: boolean = true) => {
+		addTab: (id: string, repoPath: string, branchName: string, adoptExisting: boolean = false, activate: boolean = true, derivedFromBranch?: string) => {
 			update(tabs => {
 				if (activate) {
 					// Deactivate all tabs when creating an active tab
 					tabs.forEach(tab => tab.active = false);
 				}
 				// Add new tab (start as 'running' until backend detects prompt)
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, repoPath, active: activate, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
+				return [...tabs, { id, sessionId: null, title: branchName, branchName, repoPath, derivedFromBranch, active: activate, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
 			});
 		},
 		removeTab: (id: string, preserveWorktree: boolean = true) => {
@@ -89,6 +90,15 @@ function createTerminalsStore() {
 				return tabs;
 			});
 		},
+	updateDerivedFromBranch: (id: string, derivedFromBranch: string) => {
+		update(tabs => {
+			const tab = tabs.find(tab => tab.id === id);
+			if (tab) {
+				tab.derivedFromBranch = derivedFromBranch;
+			}
+			return tabs;
+		});
+	},
 		updateTitle: (id: string, title: string) => {
 			update(tabs => {
 				const tab = tabs.find(tab => tab.id === id);

@@ -66,16 +66,61 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 	if (sessionId) {
 		const sessionManager = registry.getRepositoryBySessionId(sessionId);
 		if (sessionManager) {
-			// Check if base branch commit has changed
-			const baseBranchChanged = sessionManager.checkAndUpdateBaseBranch();
+			// Check if this session's base branch commit has changed
+			const baseBranchChanged = sessionManager.checkAndUpdateBaseBranch(sessionId);
 
 			if (baseBranchChanged) {
-				// Base branch changed - broadcast git status to all tabs
-				console.log('Base branch changed - broadcasting git status to all tabs');
-				broadcastGitStatusToAll(
-					sessionManager.getAllSessions(),
-					(sid) => sessionManager.getGitStatus(sid)
-				);
+				// This session's base branch changed - broadcast to all sessions using the same base branch
+				const allSessions = sessionManager.getAllSessions();
+				const currentSession = allSessions.get(sessionId);
+
+				if (currentSession) {
+					const changedBaseBranch = currentSession.baseBranchName;
+					console.log(`Base branch ${changedBaseBranch} changed - broadcasting to all sessions using it`);
+
+					// Broadcast to all sessions that use the same base branch
+					for (const [sid, session] of allSessions) {
+						if (session.baseBranchName === changedBaseBranch) {
+							try {
+								const gitStatus = sessionManager.getGitStatus(sid);
+
+								// Include commit log in broadcast
+								let commitLog: CommitInfo[] | undefined = undefined;
+								try {
+									commitLog = sessionManager.getCommitLog(sid);
+								} catch (commitLogError) {
+									console.error(`Failed to get commit log for session ${sid}:`, commitLogError);
+								}
+
+								sendGitBranchStatus(session.branchName, gitStatus, commitLog);
+							} catch (error) {
+								console.error(`Failed to broadcast git status for session ${sid}:`, error);
+							}
+						}
+					}
+
+					// Update terminals that ARE the base branch itself
+					for (const [sid, session] of allSessions) {
+						// Check if this session IS on the changed base branch (but has a different base)
+						if (session.branchName === changedBaseBranch && session.baseBranchName !== changedBaseBranch) {
+							try {
+								const gitStatus = sessionManager.getGitStatus(sid);
+
+								let commitLog: CommitInfo[] | undefined = undefined;
+								try {
+									commitLog = sessionManager.getCommitLog(sid);
+								} catch (commitLogError) {
+									console.error(`Failed to get commit log for session ${sid}:`, commitLogError);
+								}
+
+								sendGitBranchStatus(session.branchName, gitStatus, commitLog);
+								console.log(`Updated terminal for base branch ${changedBaseBranch} itself (session ${sid})`);
+							} catch (error) {
+								console.error(`Failed to update base branch terminal ${sid}:`, error);
+							}
+						}
+					}
+				}
 			} else {
 				// Base branch unchanged - just update current tab's git status
 				try {

@@ -430,6 +430,7 @@
 						repoPath={tab.repoPath}
 						{branchName}
 						adoptExisting={tab.adoptExisting}
+						derivedFromBranch={tab.derivedFromBranch}
 						on:exit={handleTerminalExit}
 						on:requestClose={handleRequestClose}
 					/>

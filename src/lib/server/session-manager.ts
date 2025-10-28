@@ -31,7 +31,6 @@ export class SessionManager {
 	private baseDir: string;
 	private repoRoot: string;
 	private baseBranch: string;
-	private baseBranchCommitId: string | null = null;
 	private sessions: Map<string, SessionInfo>;
 
 	constructor(repoPath: string) {
@@ -58,9 +57,6 @@ export class SessionManager {
 		// Get base branch (the branch we started from)
 		this.baseBranch = this.getBaseBranch();
 
-		// Get initial base branch commit ID
-		this.baseBranchCommitId = this.getBaseBranchCommitId();
-
 		// Set up base directory for worktrees in user home directory
 		// Format: ~/.claude-hydra/<repo-name>-<hash>
 		const repoName = basename(this.repoRoot);
@@ -74,7 +70,6 @@ export class SessionManager {
 		console.log(`SessionManager initialized:`);
 		console.log(`  Repository: ${this.repoRoot}`);
 		console.log(`  Base branch: ${this.baseBranch}`);
-		console.log(`  Base branch commit ID: ${this.baseBranchCommitId}`);
 		console.log(`  Base directory: ${this.baseDir}`);
 	}
 
@@ -98,10 +93,14 @@ export class SessionManager {
 	 * @param sessionId - Unique identifier for this session
 	 * @param branchName - User-provided branch name
 	 * @param adoptExisting - If true, adopt an existing worktree instead of creating a new one
+	 * @param baseBranchName - The branch to derive from (defaults to repository's base branch)
 	 * @returns Session information including the worktree path to use as cwd
 	 */
-	async createSession(sessionId: string, branchName: string, adoptExisting: boolean = false): Promise<SessionInfo> {
+	async createSession(sessionId: string, branchName: string, adoptExisting: boolean = false, baseBranchName?: string): Promise<SessionInfo> {
 		const worktreePath = join(this.baseDir, branchName);
+
+		// Use provided baseBranchName or default to repository's base branch
+		const derivedFrom = baseBranchName || this.baseBranch;
 
 		// If adopting existing worktree
 		if (adoptExisting) {
@@ -115,14 +114,30 @@ export class SessionManager {
 				throw new Error(`Cannot adopt: Worktree directory '${branchName}' does not exist`);
 			}
 
+			// Try to read base branch from git config first
+			let actualBaseBranch = this.readBaseBranchConfig(branchName, worktreePath);
+
+			// If not in git config, use provided baseBranchName or detect default
+			if (!actualBaseBranch) {
+				actualBaseBranch = baseBranchName || this.detectDefaultBaseBranch();
+				// Store it for future use
+				this.writeBaseBranchConfig(branchName, actualBaseBranch, worktreePath);
+			}
+
 			const sessionInfo: SessionInfo = {
 				sessionId,
 				branchName,
-				worktreePath
+				worktreePath,
+				baseBranchName: actualBaseBranch,
+				baseBranchCommitId: null
 			};
 
 			this.sessions.set(sessionId, sessionInfo);
-			console.log(`Adopted existing session ${sessionId}: branch=${branchName}, path=${worktreePath}`);
+
+			// Initialize base branch commit ID
+			sessionInfo.baseBranchCommitId = this.getBaseBranchCommitId(sessionId);
+
+			console.log(`Adopted existing session ${sessionId}: branch=${branchName}, path=${worktreePath}, baseBranch=${actualBaseBranch}`);
 
 			return sessionInfo;
 		}
@@ -139,9 +154,9 @@ export class SessionManager {
 		}
 
 		try {
-			// Create branch and worktree
+			// Create branch and worktree from base branch
 			// Note: git worktree outputs to stderr even on success, so we ignore stderr
-			const result = execSync(`git worktree add "${worktreePath}" -b "${branchName}"`, {
+			const result = execSync(`git worktree add "${worktreePath}" -b "${branchName}" "${derivedFrom}"`, {
 				cwd: this.repoRoot,
 				encoding: 'utf8',
 				stdio: ['pipe', 'pipe', 'ignore']
@@ -150,11 +165,20 @@ export class SessionManager {
 			const sessionInfo: SessionInfo = {
 				sessionId,
 				branchName,
-				worktreePath
+				worktreePath,
+				baseBranchName: derivedFrom,
+				baseBranchCommitId: null
 			};
 
+			// Store base branch in git config for persistence
+			this.writeBaseBranchConfig(branchName, derivedFrom, worktreePath);
+
 			this.sessions.set(sessionId, sessionInfo);
-			console.log(`Created session ${sessionId}: branch=${branchName}, path=${worktreePath}`);
+
+			// Initialize base branch commit ID
+			sessionInfo.baseBranchCommitId = this.getBaseBranchCommitId(sessionId);
+
+			console.log(`Created session ${sessionId}: branch=${branchName}, path=${worktreePath}, baseBranch=${derivedFrom}`);
 
 			// Sync local files to worktree
 			await this.syncLocalFilesToWorktree(worktreePath);
@@ -164,7 +188,7 @@ export class SessionManager {
 			const errorMessage = error.message || String(error);
 			const stdout = error.stdout || '';
 			console.error(`Git worktree command failed:`);
-			console.error(`  Command: git worktree add "${worktreePath}" -b "${branchName}"`);
+			console.error(`  Command: git worktree add "${worktreePath}" -b "${branchName}" "${derivedFrom}"`);
 			console.error(`  CWD: ${this.repoRoot}`);
 			console.error(`  Error: ${errorMessage}`);
 			if (stdout) {
@@ -584,31 +608,171 @@ export class SessionManager {
 	}
 
 	/**
-	 * Gets the current commit ID of the base branch.
-	 * @returns The commit SHA of the base branch, or null if unable to retrieve
+	 * Detects the default base branch for the repository.
+	 * Checks for "main" first, then "master", then falls back to current branch.
 	 */
-	private getBaseBranchCommitId(): string | null {
+	private detectDefaultBaseBranch(): string {
 		try {
-			return execSync(`git rev-parse ${this.baseBranch}`, {
+			// Try to find remote HEAD reference (most reliable)
+			const remoteHead = execSync('git symbolic-ref refs/remotes/origin/HEAD', {
 				cwd: this.repoRoot,
 				encoding: 'utf8',
 				stdio: 'pipe'
 			}).trim();
+
+			// Extract branch name from "refs/remotes/origin/main"
+			const match = remoteHead.match(/refs\/remotes\/origin\/(.+)/);
+			if (match) {
+				return match[1];
+			}
 		} catch (error) {
-			console.error('Failed to get base branch commit ID:', error);
+			// Remote HEAD not set or no remote, continue to local checks
+		}
+
+		// Check if "main" branch exists locally
+		if (this.branchExists('main')) {
+			return 'main';
+		}
+
+		// Check if "master" branch exists locally
+		if (this.branchExists('master')) {
+			return 'master';
+		}
+
+		// Fall back to current branch
+		return this.baseBranch;
+	}
+
+	/**
+	 * Writes the base branch to git config for a specific branch.
+	 */
+	private writeBaseBranchConfig(branchName: string, baseBranchName: string, worktreePath: string): void {
+		try {
+			// Ensure worktree directory exists
+			if (!existsSync(worktreePath)) {
+				console.error(`[writeBaseBranchConfig] Worktree path does not exist: ${worktreePath}`);
+				return;
+			}
+
+			console.log(`[writeBaseBranchConfig] Writing config: branch.${branchName}.base = ${baseBranchName}`);
+			console.log(`[writeBaseBranchConfig] CWD: ${worktreePath}`);
+
+			// Write the config (quote the key for safety)
+			execSync(`git config "branch.${branchName}.base" "${baseBranchName}"`, {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: ['pipe', 'pipe', 'pipe']
+			});
+
+			// Verify it was written
+			const verify = execSync(`git config --get "branch.${branchName}.base"`, {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: ['pipe', 'pipe', 'pipe']
+			}).trim();
+
+			if (verify === baseBranchName) {
+				console.log(`[writeBaseBranchConfig] SUCCESS: Stored and verified branch.${branchName}.base = ${baseBranchName}`);
+			} else {
+				console.error(`[writeBaseBranchConfig] VERIFICATION FAILED: Expected "${baseBranchName}", got "${verify}"`);
+			}
+		} catch (error: any) {
+			console.error(`[writeBaseBranchConfig] FAILED for ${branchName}:`);
+			console.error(`  Message: ${error.message}`);
+			if (error.stderr) console.error(`  Stderr: ${error.stderr.toString()}`);
+			if (error.stdout) console.error(`  Stdout: ${error.stdout.toString()}`);
+			console.error(`  CWD: ${worktreePath}`);
+			// Don't throw - this is not critical
+		}
+	}
+
+	/**
+	 * Reads the base branch from git config for a specific branch.
+	 * Returns null if not set.
+	 */
+	private readBaseBranchConfig(branchName: string, worktreePath: string): string | null {
+		try {
+			const result = execSync(`git config --get "branch.${branchName}.base"`, {
+				cwd: worktreePath,
+				encoding: 'utf8',
+				stdio: ['pipe', 'pipe', 'pipe']
+			}).trim();
+
+			if (result) {
+				console.log(`[readBaseBranchConfig] Found: branch.${branchName}.base = ${result}`);
+				return result;
+			}
+		} catch (error) {
+			// Config not set - this is normal for branches without stored base
+			console.log(`[readBaseBranchConfig] Not found: branch.${branchName}.base (will use default)`);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Lists all local branches in the repository.
+	 * @returns Array of branch names
+	 */
+	listBranches(): string[] {
+		try {
+			const output = execSync('git branch --list --format=%(refname:short)', {
+				cwd: this.repoRoot,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+
+			if (!output) {
+				return [];
+			}
+
+			return output.split('\n').filter(branch => branch.trim() !== '');
+		} catch (error) {
+			console.error('Failed to list branches:', error);
+			return [];
+		}
+	}
+
+	/**
+	 * Gets the current commit ID of a session's base branch.
+	 * @param sessionId - Session identifier
+	 * @returns The commit SHA of the session's base branch, or null if unable to retrieve
+	 */
+	private getBaseBranchCommitId(sessionId: string): string | null {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			console.error(`Session ${sessionId} not found`);
+			return null;
+		}
+
+		try {
+			return execSync(`git rev-parse ${session.baseBranchName}`, {
+				cwd: session.worktreePath,
+				encoding: 'utf8',
+				stdio: 'pipe'
+			}).trim();
+		} catch (error) {
+			console.error(`Failed to get base branch commit ID for session ${sessionId}:`, error);
 			return null;
 		}
 	}
 
 	/**
-	 * Checks if the base branch has changed and updates the stored commit ID.
-	 * @returns True if the base branch commit ID has changed, false otherwise
+	 * Checks if a session's base branch has changed and updates the stored commit ID.
+	 * @param sessionId - Session identifier
+	 * @returns True if the session's base branch commit ID has changed, false otherwise
 	 */
-	checkAndUpdateBaseBranch(): boolean {
-		const currentCommitId = this.getBaseBranchCommitId();
-		if (currentCommitId !== this.baseBranchCommitId) {
-			console.log(`Base branch commit ID changed: ${this.baseBranchCommitId} -> ${currentCommitId}`);
-			this.baseBranchCommitId = currentCommitId;
+	checkAndUpdateBaseBranch(sessionId: string): boolean {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			console.error(`Session ${sessionId} not found`);
+			return false;
+		}
+
+		const currentCommitId = this.getBaseBranchCommitId(sessionId);
+		if (currentCommitId !== session.baseBranchCommitId) {
+			console.log(`Base branch commit ID changed for session ${sessionId} (${session.baseBranchName}): ${session.baseBranchCommitId} -> ${currentCommitId}`);
+			session.baseBranchCommitId = currentCommitId;
 			return true;
 		}
 		return false;
@@ -642,8 +806,8 @@ export class SessionManager {
 			console.log(`[getGitStatus] hasUncommittedChanges: ${hasUncommittedChanges}`);
 
 			// Check for unmerged commits (commits in branch that aren't in base)
-			console.log(`[getGitStatus] Running: git log ${this.baseBranch}..${session.branchName} --oneline`);
-			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --oneline`, {
+			console.log(`[getGitStatus] Running: git log ${session.baseBranchName}..${session.branchName} --oneline`);
+			const logOutput = execSync(`git log ${session.baseBranchName}..${session.branchName} --oneline`, {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
@@ -653,8 +817,8 @@ export class SessionManager {
 			console.log(`[getGitStatus] hasUnmergedCommits: ${hasUnmergedCommits}`);
 
 			// Check if branch is behind base (base has commits not in branch)
-			console.log(`[getGitStatus] Running: git rev-list --count HEAD..${this.baseBranch}`);
-			const behindOutput = execSync(`git rev-list --count HEAD..${this.baseBranch}`, {
+			console.log(`[getGitStatus] Running: git rev-list --count HEAD..${session.baseBranchName}`);
+			const behindOutput = execSync(`git rev-list --count HEAD..${session.baseBranchName}`, {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
@@ -691,7 +855,7 @@ export class SessionManager {
 			// Get commits from base branch to current branch
 			// Format: hash|timestamp|subject|fullMessage
 			// Using %x00 (null byte) as separator to handle messages with pipes
-			const logOutput = execSync(`git log ${this.baseBranch}..${session.branchName} --format="%h%x00%at%x00%s%x00%B%x00"`, {
+			const logOutput = execSync(`git log ${session.baseBranchName}..${session.branchName} --format="%h%x00%at%x00%s%x00%B%x00"`, {
 				cwd: session.worktreePath,
 				encoding: 'utf8',
 				stdio: 'pipe'
@@ -798,7 +962,8 @@ export class SessionManager {
 		const trackedOutput = execSync('git ls-files', {
 			cwd: session.worktreePath,
 			encoding: 'utf8',
-			stdio: 'pipe'
+			stdio: 'pipe',
+			maxBuffer: 10 * 1024 * 1024
 		}).trim();
 
 		// Get status of modified/added/deleted tracked files
@@ -812,7 +977,8 @@ export class SessionManager {
 		const untrackedOutput = execSync('git ls-files --others', {
 			cwd: session.worktreePath,
 			encoding: 'utf8',
-			stdio: 'pipe'
+			stdio: 'pipe',
+			maxBuffer: 10 * 1024 * 1024
 		}).trim();
 
 		// Parse status into a map (only for tracked files)
@@ -874,7 +1040,8 @@ export class SessionManager {
 		const ignoredOutput = execSync('git status --ignored --porcelain', {
 			cwd: session.worktreePath,
 			encoding: 'utf8',
-			stdio: 'pipe'
+			stdio: 'pipe',
+			maxBuffer: 10 * 1024 * 1024
 		}).trim();
 
 		// Parse ignored files from status output
@@ -954,7 +1121,8 @@ export class SessionManager {
 		const allFilesOutput = execSync(`git ls-tree -r --name-only "${commitId}"`, {
 			cwd: session.worktreePath,
 			encoding: 'utf8',
-			stdio: 'pipe'
+			stdio: 'pipe',
+			maxBuffer: 10 * 1024 * 1024
 		}).trim();
 
 		// Get files that were modified in this commit (compared to parent)
@@ -1300,13 +1468,13 @@ export class SessionManager {
 		}
 
 		try {
-			// Reset to base branch
-			execSync(`git reset --hard ${this.baseBranch}`, {
+			// Reset to session's base branch
+			execSync(`git reset --hard ${session.baseBranchName}`, {
 				cwd: session.worktreePath,
 				stdio: 'pipe'
 			});
 
-			console.log(`Reset session ${sessionId} to base branch ${this.baseBranch}`);
+			console.log(`Reset session ${sessionId} to base branch ${session.baseBranchName}`);
 			return { success: true };
 		} catch (error: any) {
 			const errorMessage = error.message || String(error);
@@ -1321,6 +1489,8 @@ export interface SessionInfo {
 	sessionId: string;
 	branchName: string;
 	worktreePath: string;
+	baseBranchName: string;
+	baseBranchCommitId: string | null;
 }
 
 export interface CommitInfo {
