@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join, dirname, resolve } from 'path';
+import { createRequire } from 'module';
 import type { RepositoryRegistry } from '$lib/server/repository-registry';
 import type { SessionInfo } from '$lib/server/session-manager';
 import updateStateTemplate from '../../template/update-state.js?raw';
@@ -37,6 +38,35 @@ export class PtyManager {
 			return this.claudePath;
 		}
 
+		// Try local node_modules installation first
+		try {
+			const require = createRequire(import.meta.url);
+			const localClaudePath = require.resolve('@anthropic-ai/claude-code/cli.js');
+			const binDir = join(dirname(dirname(dirname(localClaudePath))), '.bin');
+
+			// On Windows, npm creates a .cmd wrapper in node_modules/.bin/
+			if (process.platform === 'win32') {
+				const cmdPath = join(binDir, 'claude.cmd');
+				if (existsSync(cmdPath)) {
+					this.claudePath = cmdPath;
+					console.log(`[PTY] Using local Claude Code from: ${cmdPath}`);
+					return this.claudePath;
+				}
+			} else {
+				// On Unix, check for the shell wrapper
+				const shellPath = join(binDir, 'claude');
+				if (existsSync(shellPath)) {
+					this.claudePath = shellPath;
+					console.log(`[PTY] Using local Claude Code from: ${shellPath}`);
+					return this.claudePath;
+				}
+			}
+		} catch (localError) {
+			// Local installation not found, fall back to global
+			console.log('[PTY] Local Claude Code not found, falling back to global installation');
+		}
+
+		// Fallback to global installation in PATH
 		try {
 			// On Windows, use 'where' to find the executable
 			const command = process.platform === 'win32' ? 'where claude' : 'which claude';
@@ -48,15 +78,17 @@ export class PtyManager {
 				const cmdPath = paths.find(p => p.endsWith('.cmd') || p.endsWith('.exe'));
 				if (cmdPath) {
 					this.claudePath = cmdPath;
+					console.log(`[PTY] Using global Claude Code from: ${cmdPath}`);
 					return this.claudePath;
 				}
 			}
 
 			// Fallback to first match
 			this.claudePath = paths[0];
+			console.log(`[PTY] Using global Claude Code from: ${this.claudePath}`);
 			return this.claudePath;
 		} catch (error) {
-			throw new Error('Claude executable not found in PATH. Please ensure Claude Code is installed.');
+			throw new Error('Claude executable not found in PATH or node_modules. Please ensure Claude Code is installed.');
 		}
 	}
 
