@@ -57,6 +57,11 @@
 	let showWaituserErrorDialog = false;
 	let waituserErrorOutput = '';
 
+	// Autoinit state
+	let showAutoInitStatus = false;
+	let autoInitErrorMessage = '';
+	let showAutoInitError = false;
+
 	onMount(async () => {
 		// Initialize focus stack and register with store
 		focusStack = new FocusStack();
@@ -334,6 +339,23 @@
 						// Show error dialog with command output
 						waituserErrorOutput = message.output;
 						showWaituserErrorDialog = true;
+						break;
+
+					case 'autoInitStatus':
+						// Handle autoinit status updates
+						if (message.status === 'running') {
+							showAutoInitStatus = true;
+							showAutoInitError = false;
+						} else if (message.status === 'completed') {
+							showAutoInitStatus = false;
+							showAutoInitError = false;
+						} else if (message.status === 'failed') {
+							showAutoInitStatus = false;
+							if (message.stderr) {
+								autoInitErrorMessage = message.stderr;
+								showAutoInitError = true;
+							}
+						}
 						break;
 
 					case 'error':
@@ -728,6 +750,14 @@
 	}
 
 	/**
+	 * Close autoinit error window
+	 */
+	function handleCloseAutoInitError() {
+		showAutoInitError = false;
+		autoInitErrorMessage = '';
+	}
+
+	/**
 	 * Handle F9 key press - execute waituser command
 	 */
 	export function handleWaituserExecute() {
@@ -755,6 +785,21 @@
 
 <div class="terminal-container" class:hidden={!active}>
 	<div class="terminal-area" style="width: calc(100% - {commitListWidth + 4}px)">
+		{#if showAutoInitStatus}
+			<div class="autoinit-status-bar">
+				<div class="autoinit-spinner"></div>
+				<span>Autoinitializing Working Tree...</span>
+			</div>
+		{/if}
+		{#if showAutoInitError}
+			<div class="autoinit-error-window">
+				<div class="autoinit-error-header">
+					<span class="autoinit-error-title">Autoinit Error</span>
+					<button class="autoinit-error-close" on:click={handleCloseAutoInitError}>×</button>
+				</div>
+				<div class="autoinit-error-content">{autoInitErrorMessage}</div>
+			</div>
+		{/if}
 		<div bind:this={terminalElement} class="terminal" class:hidden={showDiffViewer}></div>
 		<DiffViewer
 			bind:this={diffViewerComponent}
@@ -841,5 +886,102 @@
 		font-size: 10px;
 		color: #e1bee7;
 		font-style: italic;
+	}
+
+	.autoinit-status-bar {
+		background-color: #0dbc79;
+		color: #ffffff;
+		padding: 8px 16px;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		font-size: 13px;
+		font-weight: 500;
+		border-bottom: 1px solid #0aa768;
+		animation: slideDown 0.3s ease-out;
+	}
+
+	.autoinit-spinner {
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: #ffffff;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	@keyframes slideDown {
+		from {
+			transform: translateY(-100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+
+	.autoinit-error-window {
+		background-color: #d32f2f;
+		color: #ffffff;
+		max-height: 200px;
+		display: flex;
+		flex-direction: column;
+		border-bottom: 1px solid #b71c1c;
+		animation: slideDown 0.3s ease-out;
+	}
+
+	.autoinit-error-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 8px 12px;
+		background-color: #c62828;
+		border-bottom: 1px solid #b71c1c;
+	}
+
+	.autoinit-error-title {
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.autoinit-error-close {
+		background: none;
+		border: none;
+		color: #ffffff;
+		font-size: 24px;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		transition: background-color 0.2s;
+	}
+
+	.autoinit-error-close:hover {
+		background-color: rgba(255, 255, 255, 0.1);
+	}
+
+	.autoinit-error-close:active {
+		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.autoinit-error-content {
+		padding: 12px 16px;
+		font-family: 'Consolas', 'Courier New', monospace;
+		font-size: 12px;
+		overflow-y: auto;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+		flex: 1;
+		min-height: 0;
 	}
 </style>

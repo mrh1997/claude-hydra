@@ -100,6 +100,16 @@ function initWebSocketServer() {
 									ws.send(JSON.stringify({ type: 'exit' }));
 								}
 							},
+							(sid, status, stderr) => {
+								// Handle autoinit status updates
+								if (ws.readyState === ws.OPEN) {
+									ws.send(JSON.stringify({
+										type: 'autoInitStatus',
+										status,
+										stderr
+									}));
+								}
+							},
 							baseUrl,
 							adoptExisting,
 							baseBranchName
@@ -260,7 +270,7 @@ function initWebSocketServer() {
 										try {
 											// Create new PTY session with same branch (adoptExisting = true)
 											const baseUrl = `http://localhost:${HTTP_PORT}`;
-											const newSessionId = await ptyManager.createSession(
+											const newSessionInfo = await ptyManager.createSession(
 												capturedRepoPath,
 												capturedBranchName,
 												(sid, output) => {
@@ -273,13 +283,22 @@ function initWebSocketServer() {
 														ws.send(JSON.stringify({ type: 'exit' }));
 													}
 												},
+												(sid, status, stderr) => {
+													if (ws.readyState === ws.OPEN) {
+														ws.send(JSON.stringify({
+															type: 'autoInitStatus',
+															status,
+															stderr
+														}));
+													}
+												},
 												baseUrl,
 												true  // adoptExisting
 											);
 
 											// Update sessionId to new one
-											sessionId = newSessionId;
-											ws.send(JSON.stringify({ type: 'restarted', sessionId: newSessionId }));
+											sessionId = newSessionInfo.sessionId;
+											ws.send(JSON.stringify({ type: 'restarted', sessionId: newSessionInfo.sessionId }));
 										} catch (error: any) {
 											const errorMessage = error.message || String(error);
 											console.error('Failed to restart session:', errorMessage);

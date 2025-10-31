@@ -520,20 +520,34 @@ export class SessionManager {
 
 					// If empty string, we're in detached HEAD state
 					if (!branch) {
-						console.log('Detached HEAD detected, creating "main" branch...');
+						console.log('Detached HEAD detected, switching to "main" branch...');
+						if (!this.branchExists('main')) {
+							execSync('git checkout -b main', {
+								cwd: this.repoRoot,
+								stdio: 'pipe'
+							});
+						} else {
+							execSync('git checkout main', {
+								cwd: this.repoRoot,
+								stdio: 'pipe'
+							});
+						}
+					}
+					// Otherwise we're on a branch already, keep using it
+				} catch (error) {
+					// Error getting branch, switch to main
+					console.log('Could not determine branch, switching to "main" branch...');
+					if (!this.branchExists('main')) {
 						execSync('git checkout -b main', {
 							cwd: this.repoRoot,
 							stdio: 'pipe'
 						});
+					} else {
+						execSync('git checkout main', {
+							cwd: this.repoRoot,
+							stdio: 'pipe'
+						});
 					}
-					// Otherwise we're on a branch already, keep using it
-				} catch (error) {
-					// Error getting branch, create main
-					console.log('Could not determine branch, creating "main" branch...');
-					execSync('git checkout -b main', {
-						cwd: this.repoRoot,
-						stdio: 'pipe'
-					});
 				}
 			} catch (error) {
 				// No commits exist, create initial commit and main branch

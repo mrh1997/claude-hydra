@@ -1,6 +1,6 @@
 import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { v4 as uuidv4 } from 'uuid';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import type { RepositoryRegistry } from '$lib/server/repository-registry';
@@ -17,6 +17,7 @@ export interface TerminalSession {
 	id: string;
 	branchName: string;
 	ptyProcess: pty.IPty;
+	autoInitProcess?: ReturnType<typeof spawn>;
 	onData: (data: string) => void;
 	onExit: () => void;
 	waitForPrompt: boolean;
@@ -198,7 +199,11 @@ export class PtyManager {
 		}
 	}
 
-	private executeAutoInitScript(worktreePath: string, onData: (data: string) => void): void {
+	private executeAutoInitScript(
+		sessionId: string,
+		worktreePath: string,
+		onStatus: (status: 'running' | 'completed' | 'failed', stderr?: string) => void
+	): ReturnType<typeof spawn> | null {
 		const isWindows = process.platform === 'win32';
 
 		console.log(`[AutoInit] Searching for autoinit script in worktree: ${worktreePath}`);
@@ -224,62 +229,94 @@ export class PtyManager {
 		// If no script found, return silently
 		if (!scriptPath || !scriptType) {
 			console.log(`[AutoInit] No autoinit script found in ${worktreePath}`);
-			return;
+			return null;
 		}
 
 		console.log(`[AutoInit] Found autoinit script: ${scriptPath}`);
 
-		// Execute the script with worktree as cwd
-		try {
-			let command: string;
-			if (scriptType === 'ps1') {
-				command = `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`;
-			} else if (scriptType === 'cmd') {
-				command = `cmd /c "${scriptPath}"`;
-			} else {
-				command = `bash "${scriptPath}"`;
-			}
+		// Prepare command and args for spawn
+		let command: string;
+		let args: string[];
 
-			console.log(`[AutoInit] Executing: ${scriptPath} (cwd: ${worktreePath})`);
-			onData(`\r\n[Running auto-init script: ${scriptPath}]\r\n`);
-
-			const output = execSync(command, {
-				cwd: worktreePath,
-				encoding: 'utf8',
-				stdio: 'pipe'
-			});
-
-			// Send output to terminal (convert LF to CRLF for xterm.js)
-			if (output) {
-				onData(output.replace(/\r?\n/g, '\r\n'));
-			}
-
-			onData(`\r\n[Auto-init script completed]\r\n\r\n`);
-			console.log(`Auto-init script completed successfully`);
-		} catch (error: any) {
-			console.error(`Auto-init script failed:`, error);
-			const errorMessage = error.message || String(error);
-			const errorOutput = error.stdout || '';
-			const errorStderr = error.stderr || '';
-
-			// Send error output to terminal (convert LF to CRLF for xterm.js)
-			if (errorOutput) {
-				onData(errorOutput.replace(/\r?\n/g, '\r\n'));
-			}
-			if (errorStderr) {
-				onData(errorStderr.replace(/\r?\n/g, '\r\n'));
-			}
-			onData(`\r\n[Auto-init script failed: ${errorMessage}]\r\n\r\n`);
-
-			// Don't throw - continue with session creation even if script fails
+		if (scriptType === 'ps1') {
+			command = 'powershell';
+			args = ['-ExecutionPolicy', 'Bypass', '-File', scriptPath];
+		} else if (scriptType === 'cmd') {
+			command = 'cmd';
+			args = ['/c', scriptPath];
+		} else {
+			command = 'bash';
+			args = [scriptPath];
 		}
+
+		console.log(`[AutoInit] Executing: ${scriptPath} (cwd: ${worktreePath})`);
+		onStatus('running');
+
+		// Spawn the process asynchronously
+		const childProcess = spawn(command, args, {
+			cwd: worktreePath,
+			shell: false
+		});
+
+		let stderrBuffer = '';
+
+		// Capture stderr
+		childProcess.stderr?.on('data', (data: Buffer) => {
+			const text = data.toString();
+			stderrBuffer += text;
+			console.error(`[AutoInit] stderr: ${text}`);
+		});
+
+		// Log stdout (optional - could be forwarded to terminal if needed)
+		childProcess.stdout?.on('data', (data: Buffer) => {
+			console.log(`[AutoInit] stdout: ${data.toString()}`);
+		});
+
+		// Handle process completion
+		childProcess.on('close', (code: number | null) => {
+			if (code === 0) {
+				console.log(`[AutoInit] Script completed successfully`);
+				onStatus('completed');
+			} else {
+				console.error(`[AutoInit] Script failed with code ${code}`);
+				onStatus('failed', stderrBuffer || `Process exited with code ${code}`);
+			}
+
+			// Clean up process reference from session
+			const session = this.sessions.get(sessionId);
+			if (session) {
+				session.autoInitProcess = undefined;
+			}
+		});
+
+		childProcess.on('error', (error: Error) => {
+			console.error(`[AutoInit] Process error:`, error);
+			onStatus('failed', error.message);
+
+			// Clean up process reference from session
+			const session = this.sessions.get(sessionId);
+			if (session) {
+				session.autoInitProcess = undefined;
+			}
+		});
+
+		return childProcess;
 	}
 
 	getBranchName(sessionId: string): string | undefined {
 		return this.sessions.get(sessionId)?.branchName;
 	}
 
-	async createSession(repoPath: string, branchName: string, onData: (sessionId: string, data: string) => void, onExit: (sessionId: string) => void, baseUrl: string, adoptExisting: boolean = false, baseBranchName?: string): Promise<SessionInfo> {
+	async createSession(
+		repoPath: string,
+		branchName: string,
+		onData: (sessionId: string, data: string) => void,
+		onExit: (sessionId: string) => void,
+		onAutoInitStatus: (sessionId: string, status: 'running' | 'completed' | 'failed', stderr?: string) => void,
+		baseUrl: string,
+		adoptExisting: boolean = false,
+		baseBranchName?: string
+	): Promise<SessionInfo> {
 		const sessionId = uuidv4();
 
 		// Get or create SessionManager for this repository
@@ -304,11 +341,6 @@ export class PtyManager {
 
 		// Setup Claude hooks
 		this.setupClaudeHooks(sessionInfo.worktreePath, branchName, repoRoot);
-
-		// Execute auto-init script only when creating new worktree (not when adopting existing)
-		if (!adoptExisting) {
-			this.executeAutoInitScript(sessionInfo.worktreePath, (data) => onData(sessionId, data));
-		}
 
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();
@@ -369,6 +401,18 @@ export class PtyManager {
 
 		this.sessions.set(sessionId, session);
 
+		// Execute auto-init script in parallel (only when creating new worktree, not when adopting existing)
+		if (!adoptExisting) {
+			const autoInitProcess = this.executeAutoInitScript(
+				sessionId,
+				sessionInfo.worktreePath,
+				(status, stderr) => onAutoInitStatus(sessionId, status, stderr)
+			);
+			if (autoInitProcess) {
+				session.autoInitProcess = autoInitProcess;
+			}
+		}
+
 		// Send initial newline to trigger Claude to start and display welcome message
 		ptyProcess.write('\r');
 
@@ -403,6 +447,12 @@ export class PtyManager {
 			if (skipWorktreeCleanup) {
 				this.mergingSessions.add(sessionId);
 			}
+
+			// Kill autoinit process if still running
+			if (session.autoInitProcess) {
+				session.autoInitProcess.kill();
+			}
+
 			session.ptyProcess.kill();
 			this.sessions.delete(sessionId);
 
