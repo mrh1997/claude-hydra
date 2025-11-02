@@ -86,6 +86,13 @@ export const SHORTCUTS = {
 		ctrlKey: false,
 		shiftKey: false,
 		description: 'Execute waituser command (F9)'
+	} as KeyboardShortcut,
+	FETCH: {
+		key: 's',
+		altKey: true,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Fetch updates from remote (Alt-S)'
 	} as KeyboardShortcut
 };
 
@@ -116,6 +123,7 @@ export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 		matchesShortcut(event, SHORTCUTS.NEXT_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.PREV_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF) ||
-		matchesShortcut(event, SHORTCUTS.EXECUTE_WAITUSER)
+		matchesShortcut(event, SHORTCUTS.EXECUTE_WAITUSER) ||
+		matchesShortcut(event, SHORTCUTS.FETCH)
 	);
 }

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { TerminalTab } from '$lib/stores/terminals';
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount, onDestroy, getContext } from 'svelte';
+	import { mdiCloudSync, mdiLoading } from '@mdi/js';
+	import { SHORTCUTS, matchesShortcut } from '$lib/shortcuts';
 
 	export let repoName: string;
 	export let repoPath: string;
@@ -12,6 +14,12 @@
 	export let onResetToBaseClick: (tab: TerminalTab, event: MouseEvent) => void;
 
 	const dispatch = createEventDispatcher();
+	const websocketPort = getContext<number>('websocketPort');
+
+	let isFetching = false;
+
+	// Check if this repository group has the active tab
+	$: hasActiveTab = tabs.some(tab => tab.active);
 
 	function handleCloseRepository() {
 		dispatch('closeRepository', repoPath);
@@ -20,6 +28,37 @@
 	function handleAddWorktree() {
 		onAddWorktree(repoPath);
 	}
+
+	async function handleFetch() {
+		if (isFetching) return;
+
+		isFetching = true;
+		try {
+			// Import GitBackend dynamically to avoid circular dependencies
+			const { GitBackend } = await import('$lib/GitBackend');
+			await GitBackend.gitFetch(repoPath, websocketPort);
+		} catch (error) {
+			console.error('Failed to fetch:', error);
+		} finally {
+			isFetching = false;
+		}
+	}
+
+	function handleKeyDown(event: KeyboardEvent) {
+		// Only respond to Alt-S if this repository group has the active tab
+		if (hasActiveTab && matchesShortcut(event, SHORTCUTS.FETCH)) {
+			event.preventDefault();
+			handleFetch();
+		}
+	}
+
+	onMount(() => {
+		window.addEventListener('keydown', handleKeyDown);
+	});
+
+	onDestroy(() => {
+		window.removeEventListener('keydown', handleKeyDown);
+	});
 </script>
 
 <div class="repository-group">
@@ -29,6 +68,11 @@
 				<path d="M19 20H4C2.89543 20 2 19.1046 2 18V6C2 4.89543 2.89543 4 4 4H9L11 6H19C20.1046 6 21 6.89543 21 8V18C21 19.1046 20.1046 20 19 20Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
 			<span class="repo-name">{repoName}</span>
+			<button class="fetch-btn" on:click={handleFetch} disabled={isFetching} title="Fetch updates from remote">
+				<svg class="fetch-icon" class:spinning={isFetching} width="16" height="16" viewBox="0 0 24 24">
+					<path d={isFetching ? mdiLoading : mdiCloudSync} fill="currentColor" />
+				</svg>
+			</button>
 		</div>
 		<button class="close-repo-btn" on:click={handleCloseRepository} title="Close repository">×</button>
 	</div>
@@ -113,6 +157,10 @@
 		opacity: 0.7;
 	}
 
+	.repo-header:hover .fetch-btn {
+		opacity: 0.7;
+	}
+
 	.repo-title {
 		display: flex;
 		align-items: center;
@@ -126,6 +174,36 @@
 
 	.repo-name {
 		color: #000000;
+	}
+
+	.fetch-btn {
+		background: none;
+		border: none;
+		color: #000000;
+		cursor: pointer;
+		padding: 4px;
+		opacity: 0;
+		transition: opacity 0.2s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.fetch-btn:hover {
+		opacity: 1 !important;
+	}
+
+	.fetch-btn:disabled {
+		cursor: default;
+		opacity: 0.7 !important;
+	}
+
+	.fetch-icon {
+		flex-shrink: 0;
+	}
+
+	.fetch-icon.spinning {
+		animation: spin 1s linear infinite;
 	}
 
 	.close-repo-btn {

@@ -1535,6 +1535,26 @@ export class SessionManager {
 		}
 	}
 
+	/**
+	 * Fetch updates from remote repository
+	 * @returns Operation result with success status
+	 */
+	gitFetch(): { success: boolean; error?: string } {
+		try {
+			execSync('git fetch --all', {
+				cwd: this.repoRoot,
+				stdio: 'pipe'
+			});
+
+			console.log(`Fetched updates for repository ${this.repoRoot}`);
+			return { success: true };
+		} catch (error: any) {
+			const errorMessage = error.message || String(error);
+			console.error(`Git fetch failed for repository ${this.repoRoot}:`, errorMessage);
+			return { success: false, error: errorMessage };
+		}
+	}
+
 }
 
 export interface SessionInfo {

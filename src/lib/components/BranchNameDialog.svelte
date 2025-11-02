@@ -76,9 +76,14 @@
 			const data = JSON.parse(event.data);
 			if (data.type === 'branchesListed') {
 				branches = data.branches || [];
-				// Set default base branch to the first branch (usually main or master)
+				// Set default base branch with priority: origin/main > origin/master > main > master > first branch
 				if (branches.length > 0 && !baseBranchName) {
-					baseBranchName = branches.find(b => b === 'main' || b === 'master') || branches[0];
+					baseBranchName =
+						branches.find(b => b === 'origin/main') ||
+						branches.find(b => b === 'origin/master') ||
+						branches.find(b => b === 'main') ||
+						branches.find(b => b === 'master') ||
+						branches[0]; // Fallback to first branch if none of the above exist
 				}
 			} else if (data.type === 'error') {
 				console.error('Failed to list branches:', data.error);

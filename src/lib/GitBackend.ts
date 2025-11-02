@@ -236,4 +236,50 @@ export class GitBackend {
 		}
 		this.pendingRequests.clear();
 	}
+
+	/**
+	 * Static method to fetch updates from remote repository (repository-level operation)
+	 * @param repoPath - Path to the repository
+	 * @param websocketPort - The WebSocket port to connect to
+	 * @returns Promise that resolves when fetch completes
+	 */
+	static async gitFetch(repoPath: string, websocketPort: number): Promise<OperationResult> {
+		return new Promise((resolve, reject) => {
+			// Create a temporary WebSocket connection for this repository-level operation
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+
+			const timeout = setTimeout(() => {
+				ws.close();
+				reject(new Error('Git fetch timeout'));
+			}, 30000); // 30 second timeout for fetch operation
+
+			ws.onopen = () => {
+				ws.send(JSON.stringify({
+					type: 'gitFetch',
+					repoPath
+				}));
+			};
+
+			ws.onmessage = (event) => {
+				try {
+					const message = JSON.parse(event.data);
+					if (message.type === 'gitFetchResult') {
+						clearTimeout(timeout);
+						ws.close();
+						resolve(message.result);
+					}
+				} catch (error) {
+					clearTimeout(timeout);
+					ws.close();
+					reject(error);
+				}
+			};
+
+			ws.onerror = (error) => {
+				clearTimeout(timeout);
+				ws.close();
+				reject(new Error('WebSocket connection failed'));
+			};
+		});
+	}
 }

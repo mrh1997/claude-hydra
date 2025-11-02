@@ -671,6 +671,48 @@ function initWebSocketServer() {
 						}
 						break;
 
+					case 'gitFetch':
+						// Fetch updates from remote repository
+						try {
+							if (!data.repoPath) {
+								ws.send(JSON.stringify({ type: 'gitFetchResult', result: { success: false, error: 'Repository path is required' } }));
+								break;
+							}
+
+							// Get SessionManager for this repository
+							const sessionManager = repositoryRegistry.getOrCreateRepository(data.repoPath);
+
+							// Execute git fetch
+							const fetchResult = sessionManager.gitFetch();
+							ws.send(JSON.stringify({ type: 'gitFetchResult', result: fetchResult }));
+
+							// After successful fetch, broadcast updated git status to all sessions in this repository
+							if (fetchResult.success) {
+								try {
+									// Get all sessions for this repository
+									const allSessions = sessionManager.getAllSessions();
+
+									// Broadcast status to all sessions with commit log
+									for (const [sid, session] of allSessions) {
+										try {
+											const gitStatus = sessionManager.getGitStatus(sid);
+											const commitLog = sessionManager.getCommitLog(sid);
+											sendGitBranchStatus(session.branchName, gitStatus, commitLog);
+										} catch (error) {
+											console.error(`Failed to broadcast git status for session ${sid}:`, error);
+										}
+									}
+								} catch (error) {
+									console.error('Failed to broadcast git status after fetch:', error);
+								}
+							}
+						} catch (error: any) {
+							const errorMessage = error.message || String(error);
+							console.error('Failed to execute git fetch:', errorMessage);
+							ws.send(JSON.stringify({ type: 'gitFetchResult', result: { success: false, error: errorMessage } }));
+						}
+						break;
+
 					case 'destroy':
 						// Destroy terminal session
 						if (sessionId) {
