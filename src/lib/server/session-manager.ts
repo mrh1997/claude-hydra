@@ -730,7 +730,22 @@ export class SessionManager {
 	 */
 	listBranches(): string[] {
 		try {
-			const output = execSync('git branch --list --format=%(refname:short)', {
+			// Get list of remote names to filter them out
+			let remoteNames: string[] = [];
+			try {
+				const remotesOutput = execSync('git remote', {
+					cwd: this.repoRoot,
+					encoding: 'utf8',
+					stdio: 'pipe'
+				}).trim();
+				if (remotesOutput) {
+					remoteNames = remotesOutput.split('\n').map(r => r.trim()).filter(r => r !== '');
+				}
+			} catch (e) {
+				// No remotes configured, continue anyway
+			}
+
+			const output = execSync('git branch -a --format=%(refname:short)', {
 				cwd: this.repoRoot,
 				encoding: 'utf8',
 				stdio: 'pipe'
@@ -740,7 +755,30 @@ export class SessionManager {
 				return [];
 			}
 
-			return output.split('\n').filter(branch => branch.trim() !== '');
+			const allBranches = output.split('\n')
+				.map(branch => branch.trim())
+				.filter(branch => branch !== '')
+				// Filter out HEAD references
+				.filter(branch => !branch.includes('HEAD ->'))
+				// Remove 'remotes/' prefix if present
+				.map(branch => branch.replace(/^remotes\//, ''));
+
+			// Separate local and remote branches
+			const localBranches = allBranches.filter(branch => !branch.includes('/'))
+				// Filter out bare remote names (e.g., "origin")
+				.filter(branch => !remoteNames.includes(branch));
+			const remoteBranches = allBranches.filter(branch => branch.includes('/'))
+				// Filter out bare remote names with trailing slash
+				.filter(branch => {
+					const parts = branch.split('/');
+					return parts.length >= 2 && parts[1] !== '';
+				});
+
+			// Sort remote branches alphabetically
+			remoteBranches.sort();
+
+			// Return local branches first, then remote branches
+			return [...localBranches, ...remoteBranches];
 		} catch (error) {
 			console.error('Failed to list branches:', error);
 			return [];

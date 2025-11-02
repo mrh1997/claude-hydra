@@ -21,6 +21,14 @@ Please perform the following steps:
      - Use `git add <resolved-files>` to mark as resolved
      - Run `git rebase --continue`
      - Repeat until rebase completes
-7. In the worktree of the base Branch Fast-forward merge the rebased branch: `git merge --ff-only <current-branch>`
+7. Fastforward the base Branch to the current branch dependend on which type of branch the base branch is:
+     - in case of a local branch with a working tree:
+       In the worktree of the base Branch Fast-forward merge the current/rebased branch: `git merge --ff-only <current-branch>`
+     - in case of a local branch without a working tree:
+       fast forward the current/rebased branch directlry (from current working tree)
+     - in case of a remote branch:
+       push the current/rebased branch directly to the remote repository under the name of the base branch
+    
+       
 
 Execute these steps without asking for confirmation. Handle all conflicts automatically.
