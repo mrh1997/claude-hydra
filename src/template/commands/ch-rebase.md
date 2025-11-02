@@ -21,5 +21,8 @@ Please perform the following steps:
      - Repeat until rebase completes
 6. If there was a temporary commit created in step 2:
    - Run `git reset HEAD~1` to undo the temporary commit while keeping the changes in the working tree
+7. Check if the base branch is a remote branch:
+   - If `$CLAUDE_HYDRA_BASE_BRANCH` contains a "/" character (e.g., "origin/main"), it's a remote branch
+   - If it's a remote branch, perform a force push: `git push --force-with-lease`
 
 Execute these steps without asking for confirmation. Handle all conflicts automatically.
