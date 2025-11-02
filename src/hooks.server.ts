@@ -718,8 +718,11 @@ function initWebSocketServer() {
 						if (sessionId) {
 							// Check if we should preserve the worktree (default: false for backward compatibility)
 							const preserveWorktree = data.preserveWorktree || false;
+							console.log(`[hooks.server.ts] Received destroy message for sessionId=${sessionId}, preserveWorktree=${preserveWorktree}, raw value=${data.preserveWorktree}`);
 							ptyManager.destroy(sessionId, preserveWorktree);
 							sessionId = null;
+						} else {
+							console.warn(`[hooks.server.ts] Received destroy message but sessionId is null`);
 						}
 						break;
 				}

@@ -204,88 +204,77 @@ export class SessionManager {
 	 * @throws Error if worktree cleanup fails
 	 */
 	destroySession(sessionId: string): void {
+		console.log(`[session-manager.destroySession] Starting cleanup for sessionId=${sessionId}`);
+
 		const session = this.sessions.get(sessionId);
 		if (!session) {
-			console.warn(`Session ${sessionId} not found for cleanup`);
+			console.warn(`[session-manager.destroySession] Session ${sessionId} not found for cleanup`);
 			return;
 		}
 
+		console.log(`[session-manager.destroySession] Session details: branchName=${session.branchName}, worktreePath=${session.worktreePath}`);
+
 		let worktreeRemoved = false;
 
-		// Step 1: Try git worktree remove --force with retries
-		const maxAttempts = process.platform === 'win32' ? 5 : 3;
-		const retryDelay = process.platform === 'win32' ? 2 : 1;
-
-		for (let attempt = 0; attempt < maxAttempts; attempt++) {
-			try {
-				execSync(`git worktree remove "${session.worktreePath}" --force`, {
-					cwd: this.repoRoot,
-					stdio: 'pipe'
-				});
-				worktreeRemoved = true;
-				console.log(`Removed worktree using git: ${session.worktreePath}`);
-				break;
-			} catch (error) {
-				if (attempt < maxAttempts - 1) {
-					console.warn(`git worktree remove attempt ${attempt + 1} failed, retrying...`);
-					// Wait a bit for file handles to be released (longer on Windows)
-					sleepSync(retryDelay);
-				} else {
-					console.warn(`git worktree remove failed after ${maxAttempts} attempts, attempting manual deletion: ${error}`);
-				}
-			}
+		// Step 1: Try git worktree remove --force (single attempt, processes already exited)
+		try {
+			console.log(`[session-manager.destroySession] Attempting: git worktree remove "${session.worktreePath}" --force`);
+			execSync(`git worktree remove "${session.worktreePath}" --force`, {
+				cwd: this.repoRoot,
+				stdio: 'pipe'
+			});
+			worktreeRemoved = true;
+			console.log(`[session-manager.destroySession] SUCCESS: Removed worktree using git: ${session.worktreePath}`);
+		} catch (error) {
+			console.warn(`[session-manager.destroySession] git worktree remove failed, attempting manual deletion. Error:`, error);
 		}
 
-		// Step 2: If git removal failed, try manual deletion with retries
+		// Step 2: If git removal failed, try manual deletion
 		if (!worktreeRemoved && existsSync(session.worktreePath)) {
-			const manualAttempts = process.platform === 'win32' ? 5 : 3;
-			const manualRetryDelay = process.platform === 'win32' ? 2 : 1;
+			console.log(`[session-manager.destroySession] Git worktree remove failed, attempting manual deletion`);
+			try {
+				console.log(`[session-manager.destroySession] Manual deletion: rmSync("${session.worktreePath}")`);
+				rmSync(session.worktreePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+				console.log(`[session-manager.destroySession] SUCCESS: Manually deleted worktree directory: ${session.worktreePath}`);
 
-			for (let attempt = 0; attempt < manualAttempts; attempt++) {
+				// Step 3: Prune worktree records after manual deletion
 				try {
-					rmSync(session.worktreePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-					console.log(`Manually deleted worktree directory: ${session.worktreePath}`);
-
-					// Step 3: Prune worktree records after manual deletion
-					try {
-						execSync('git worktree prune', {
-							cwd: this.repoRoot,
-							stdio: 'pipe'
-						});
-						console.log('Pruned worktree records');
-						worktreeRemoved = true;
-						break;
-					} catch (pruneError) {
-						console.error(`git worktree prune failed: ${pruneError}`);
-					}
-				} catch (deleteError) {
-					if (attempt < manualAttempts - 1) {
-						console.warn(`Manual deletion attempt ${attempt + 1} failed, retrying...`);
-						// Wait for file handles to be released
-						sleepSync(manualRetryDelay);
-					} else {
-						console.error(`Manual deletion failed after ${manualAttempts} attempts: ${deleteError}`);
-					}
+					console.log(`[session-manager.destroySession] Running git worktree prune`);
+					execSync('git worktree prune', {
+						cwd: this.repoRoot,
+						stdio: 'pipe'
+					});
+					console.log('[session-manager.destroySession] SUCCESS: Pruned worktree records');
+					worktreeRemoved = true;
+				} catch (pruneError) {
+					console.error(`[session-manager.destroySession] git worktree prune failed:`, pruneError);
+					// Still consider worktree removed if manual deletion succeeded
+					worktreeRemoved = true;
 				}
+			} catch (deleteError) {
+				console.error(`[session-manager.destroySession] FAILED: Manual deletion failed:`, deleteError);
 			}
 		}
 
 		// If worktree cleanup failed, throw error (don't delete branch)
 		if (!worktreeRemoved) {
+			console.error(`[session-manager.destroySession] FATAL: Failed to remove worktree at ${session.worktreePath}`);
 			throw new Error(`Failed to remove worktree at ${session.worktreePath}. Please close any programs accessing this directory and try again.`);
 		}
 
 		// Only delete branch if worktree was successfully removed
+		console.log(`[session-manager.destroySession] Worktree removed successfully, now deleting branch: ${session.branchName}`);
 		try {
+			console.log(`[session-manager.destroySession] Executing: git branch -D "${session.branchName}"`);
 			execSync(`git branch -D "${session.branchName}"`, {
 				cwd: this.repoRoot,
 				stdio: 'pipe'
 			});
 
 			this.sessions.delete(sessionId);
-			console.log(`Destroyed session ${sessionId}: branch=${session.branchName}`);
+			console.log(`[session-manager.destroySession] SUCCESS: Destroyed session ${sessionId}: branch=${session.branchName}`);
 		} catch (error) {
-			console.error(`Error deleting branch ${session.branchName}:`, error);
+			console.error(`[session-manager.destroySession] FAILED: Error deleting branch ${session.branchName}:`, error);
 			throw new Error(`Worktree removed but failed to delete branch ${session.branchName}`);
 		}
 	}

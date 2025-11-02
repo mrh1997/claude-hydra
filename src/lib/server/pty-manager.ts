@@ -397,7 +397,7 @@ export class PtyManager {
 		};
 
 		ptyProcess.onData(session.onData);
-		ptyProcess.onExit(session.onExit);
+		ptyProcess.onExit(() => session.onExit());
 
 		this.sessions.set(sessionId, session);
 
@@ -440,39 +440,82 @@ export class PtyManager {
 	}
 
 	destroy(sessionId: string, skipWorktreeCleanup: boolean = false): void {
+		console.log(`[pty-manager.destroy] Called for sessionId=${sessionId}, skipWorktreeCleanup=${skipWorktreeCleanup}`);
+
 		const session = this.sessions.get(sessionId);
 		if (session) {
 			// If skipWorktreeCleanup is true, mark this session as being merged
 			// The onExit handler will skip cleanup for merging sessions
 			if (skipWorktreeCleanup) {
+				console.log(`[pty-manager.destroy] Marking session ${sessionId} for preservation (skipWorktreeCleanup=true)`);
 				this.mergingSessions.add(sessionId);
 			}
 
-			// Kill autoinit process if still running
-			if (session.autoInitProcess) {
-				session.autoInitProcess.kill();
-			}
-
-			session.ptyProcess.kill();
-			this.sessions.delete(sessionId);
-
-			// When NOT in merge flow, clean up the worktree/branch
+			// When NOT in merge flow, clean up the worktree/branch AFTER processes exit
 			// This handles: WebSocket disconnect, explicit destroy message, discards
 			if (!skipWorktreeCleanup) {
-				// Add delay on Windows to ensure PTY process fully exits and file handles are released
-				const cleanupDelay = process.platform === 'win32' ? 1000 : 100;
-				setTimeout(() => {
-					try {
-						const sessionManager = this.repositoryRegistry.getRepositoryBySessionId(sessionId);
-						if (sessionManager) {
-							sessionManager.destroySession(sessionId);
-						}
-						this.repositoryRegistry.unregisterSession(sessionId);
-					} catch (error) {
-						console.error(`Failed to cleanup session ${sessionId}:`, error);
+				console.log(`[pty-manager.destroy] Will cleanup worktree/branch for session ${sessionId} after processes exit`);
+
+				// Track which processes have exited
+				let ptyExited = false;
+				let autoInitExited = !session.autoInitProcess; // true if no autoinit process
+
+				const tryCleanup = () => {
+					console.log(`[pty-manager.destroy] Process exit status for ${sessionId}: ptyExited=${ptyExited}, autoInitExited=${autoInitExited}`);
+					if (ptyExited && autoInitExited) {
+						console.log(`[pty-manager.destroy] All processes exited, deleting session from map and starting cleanup after safety delay`);
+						// Delete session from map now that processes have exited
+						this.sessions.delete(sessionId);
+
+						// Small safety delay for Windows to finalize file handle cleanup
+						setTimeout(() => {
+							console.log(`[pty-manager.destroy] Starting cleanup for session ${sessionId}`);
+							try {
+								const sessionManager = this.repositoryRegistry.getRepositoryBySessionId(sessionId);
+								if (sessionManager) {
+									console.log(`[pty-manager.destroy] Calling sessionManager.destroySession for ${sessionId}`);
+									sessionManager.destroySession(sessionId);
+								} else {
+									console.warn(`[pty-manager.destroy] No sessionManager found for session ${sessionId}`);
+								}
+								this.repositoryRegistry.unregisterSession(sessionId);
+							} catch (error) {
+								console.error(`[pty-manager.destroy] Failed to cleanup session ${sessionId}:`, error);
+							}
+						}, 200); // Small delay for OS to finalize file handle release
 					}
-				}, cleanupDelay);
+				};
+
+				// Override the onExit handler to trigger cleanup after PTY exits
+				const originalOnExit = session.onExit;
+				session.onExit = () => {
+					console.log(`[pty-manager.destroy] PTY process exited for session ${sessionId}`);
+					originalOnExit();
+					ptyExited = true;
+					tryCleanup();
+				};
+
+				// If autoinit process is running, wait for it to exit too
+				if (session.autoInitProcess) {
+					console.log(`[pty-manager.destroy] Waiting for autoinit process to exit for session ${sessionId}`);
+					session.autoInitProcess.on('close', () => {
+						console.log(`[pty-manager.destroy] AutoInit process exited for session ${sessionId}`);
+						autoInitExited = true;
+						tryCleanup();
+					});
+					session.autoInitProcess.kill();
+				}
+			} else {
+				console.log(`[pty-manager.destroy] Skipping worktree cleanup for session ${sessionId} (preservation requested)`);
+				// For merge/rebase flow, delete session immediately since no cleanup needed
+				this.sessions.delete(sessionId);
 			}
+
+			// Kill PTY process (cleanup will be triggered by onExit)
+			// Don't delete session here - it will be deleted in tryCleanup() after process exits
+			session.ptyProcess.kill();
+		} else {
+			console.warn(`[pty-manager.destroy] Session ${sessionId} not found in sessions map`);
 		}
 	}
 

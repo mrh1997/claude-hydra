@@ -380,6 +380,15 @@
 	}
 
 	onDestroy(() => {
+		console.log(`[Terminal.onDestroy] Starting destruction for terminalId=${terminalId}, sessionId=${sessionId}, timestamp=${Date.now()}`);
+		console.log(`[Terminal.onDestroy] preserveWorktree variable value: ${preserveWorktree}`);
+		console.log(`[Terminal.onDestroy] tab?.preserveWorktreeOnDestroy value: ${tab?.preserveWorktreeOnDestroy}`);
+
+		// Check for race condition: if flag was set but reactive statement hasn't executed yet
+		if (tab?.preserveWorktreeOnDestroy !== undefined && preserveWorktree !== tab.preserveWorktreeOnDestroy) {
+			console.error(`[Terminal.onDestroy] RACE CONDITION DETECTED! preserveWorktree=${preserveWorktree} but tab.preserveWorktreeOnDestroy=${tab.preserveWorktreeOnDestroy}`);
+		}
+
 		// Clear any pending blur timeout
 		if (blurTimeout !== null) {
 			clearTimeout(blurTimeout);
@@ -388,6 +397,7 @@
 			if (sessionId) {
 				// Preserve worktree by default - this allows tabs to be restored when repository is reopened
 				// Only destroy worktrees when explicitly requested (e.g., user closes individual tab)
+				console.log(`[Terminal.onDestroy] Sending destroy message with preserveWorktree=${preserveWorktree} for sessionId=${sessionId}`);
 				ws.send(JSON.stringify({ type: 'destroy', preserveWorktree }));
 				// Unregister GitBackend
 				gitBackends.unregister(sessionId);
@@ -397,6 +407,7 @@
 		if (terminal) {
 			terminal.dispose();
 		}
+		console.log(`[Terminal.onDestroy] Completed destruction for terminalId=${terminalId}`);
 	});
 
 	$: if (terminal && active) {
