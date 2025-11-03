@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, getContext } from 'svelte';
 	import type { FocusStack } from '$lib/FocusStack';
+	import { terminals } from '$lib/stores/terminals';
 
 	export let show = false;
 	export let errorMessage = '';
@@ -15,11 +16,28 @@
 	let inputElement: HTMLInputElement;
 	let baseBranchInputElement: HTMLInputElement;
 	let dialogElement: HTMLDivElement;
-	let dropdownElement: HTMLDivElement;
+	let dropdownElement: HTMLDivElement; // For base branch dropdown
+	let branchDropdownElement: HTMLDivElement; // For branch name dropdown
 	let isPushed = false; // Track whether we've pushed to focus stack
-	let showDropdown = false;
-	let selectedIndex = -1;
+	let showDropdown = false; // For base branch dropdown
+	let selectedIndex = -1; // For base branch dropdown
+	let showBranchDropdown = false; // For branch name dropdown
+	let selectedBranchIndex = -1; // For branch name dropdown
 	const dispatch = createEventDispatcher();
+
+	// Get list of branch names that are already opened as terminals
+	$: openedBranches = $terminals.map(t => t.branchName);
+
+	// Filter branches for the branch name dropdown
+	// Exclude branches that are already opened and filter by current input
+	$: filteredBranchesForInput = branches
+		.filter(b => !openedBranches.includes(b))
+		.filter(b => branchName === '' || b.toLowerCase().includes(branchName.toLowerCase()));
+
+	// Filter branches for the base branch dropdown (same as before, no exclusion)
+	$: filteredBranchesForBase = branches.filter(b =>
+		baseBranchName === '' || b.toLowerCase().includes(baseBranchName.toLowerCase())
+	);
 
 	// Fetch branches when dialog is shown
 	$: if (show && repoPath) {
@@ -38,6 +56,8 @@
 		errorMessage = '';
 		showDropdown = false;
 		selectedIndex = -1;
+		showBranchDropdown = false;
+		selectedBranchIndex = -1;
 		focusStack.push(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -49,6 +69,7 @@
 		focusStack.pop();
 		isPushed = false;
 		showDropdown = false;
+		showBranchDropdown = false;
 	}
 
 	// Fallback autofocus when focusStack is not available
@@ -58,6 +79,8 @@
 		errorMessage = '';
 		showDropdown = false;
 		selectedIndex = -1;
+		showBranchDropdown = false;
+		selectedBranchIndex = -1;
 		setTimeout(() => {
 			if (inputElement) {
 				inputElement.focus();
@@ -121,20 +144,96 @@
 
 	function handleBranchNameKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			// Move to base branch input or submit if base branch already filled
+			if (showBranchDropdown && selectedBranchIndex >= 0 && selectedBranchIndex < filteredBranchesForInput.length) {
+				// Select the highlighted branch from dropdown
+				event.preventDefault();
+				const selectedBranch = filteredBranchesForInput[selectedBranchIndex];
+				branchName = selectedBranch;
+				showBranchDropdown = false;
+				selectedBranchIndex = -1;
+				// Fetch base branch for selected branch
+				fetchBaseBranchForBranch(selectedBranch);
+				return;
+			}
+			// Move to base branch input
 			if (baseBranchInputElement) {
 				baseBranchInputElement.focus();
 			}
 		} else if (event.key === 'Escape') {
-			handleCancel();
+			if (showBranchDropdown) {
+				showBranchDropdown = false;
+				selectedBranchIndex = -1;
+			} else {
+				handleCancel();
+			}
+		} else if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (!showBranchDropdown && filteredBranchesForInput.length > 0) {
+				showBranchDropdown = true;
+				selectedBranchIndex = 0;
+			} else if (selectedBranchIndex < filteredBranchesForInput.length - 1) {
+				selectedBranchIndex++;
+			}
+		} else if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (selectedBranchIndex > 0) {
+				selectedBranchIndex--;
+			}
 		}
+	}
+
+	function handleBranchNameFocus() {
+		if (filteredBranchesForInput.length > 0) {
+			showBranchDropdown = true;
+			selectedBranchIndex = -1;
+		}
+	}
+
+	function handleBranchNameBlur() {
+		// Delay hiding dropdown to allow click on dropdown item
+		setTimeout(() => {
+			showBranchDropdown = false;
+			selectedBranchIndex = -1;
+		}, 200);
+	}
+
+	function handleBranchDropdownItemClick(branch: string) {
+		branchName = branch;
+		showBranchDropdown = false;
+		selectedBranchIndex = -1;
+		// Fetch base branch for selected branch
+		fetchBaseBranchForBranch(branch);
+	}
+
+	function fetchBaseBranchForBranch(branch: string) {
+		const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+
+		ws.onopen = () => {
+			ws.send(JSON.stringify({ type: 'getBaseBranch', repoPath, branchName: branch }));
+		};
+
+		ws.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			if (data.type === 'baseBranch' && data.baseBranchName) {
+				// Auto-populate base branch field (but keep it editable)
+				baseBranchName = data.baseBranchName;
+			} else if (data.type === 'error') {
+				console.error('Failed to fetch base branch:', data.error);
+			}
+			ws.close();
+		};
+
+		ws.onerror = () => {
+			console.error('WebSocket error while fetching base branch');
+			ws.close();
+		};
 	}
 
 	function handleBaseBranchKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			if (showDropdown && selectedIndex >= 0 && selectedIndex < branches.length) {
+			if (showDropdown && selectedIndex >= 0 && selectedIndex < filteredBranchesForBase.length) {
 				// Select the highlighted item
-				baseBranchName = branches[selectedIndex];
+				baseBranchName = filteredBranchesForBase[selectedIndex];
 				showDropdown = false;
 				selectedIndex = -1;
 			}
@@ -148,10 +247,10 @@
 			}
 		} else if (event.key === 'ArrowDown') {
 			event.preventDefault();
-			if (!showDropdown && branches.length > 0) {
+			if (!showDropdown && filteredBranchesForBase.length > 0) {
 				showDropdown = true;
 				selectedIndex = 0;
-			} else if (selectedIndex < branches.length - 1) {
+			} else if (selectedIndex < filteredBranchesForBase.length - 1) {
 				selectedIndex++;
 			}
 		} else if (event.key === 'ArrowUp') {
@@ -163,7 +262,7 @@
 	}
 
 	function handleBaseBranchFocus() {
-		if (branches.length > 0) {
+		if (filteredBranchesForBase.length > 0) {
 			showDropdown = true;
 			selectedIndex = -1;
 		}
@@ -219,15 +318,35 @@
 
 			<div class="form-group">
 				<label for="branch-name">Branch Name:</label>
-				<input
-					id="branch-name"
-					type="text"
-					bind:this={inputElement}
-					bind:value={branchName}
-					on:keydown={handleBranchNameKeydown}
-					placeholder="e.g., feature-foo"
-					autocomplete="off"
-				/>
+				<div class="input-container">
+					<input
+						id="branch-name"
+						type="text"
+						bind:this={inputElement}
+						bind:value={branchName}
+						on:keydown={handleBranchNameKeydown}
+						on:focus={handleBranchNameFocus}
+						on:blur={handleBranchNameBlur}
+						placeholder="e.g., feature-foo"
+						autocomplete="off"
+					/>
+					{#if showBranchDropdown && filteredBranchesForInput.length > 0}
+						<div class="dropdown" bind:this={branchDropdownElement}>
+							{#each filteredBranchesForInput as branch, index}
+								<div
+									class="dropdown-item"
+									class:selected={index === selectedBranchIndex}
+									on:mousedown={() => handleBranchDropdownItemClick(branch)}
+									on:mouseenter={() => selectedBranchIndex = index}
+									role="option"
+									aria-selected={index === selectedBranchIndex}
+								>
+									{branch}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<div class="form-group">
@@ -244,9 +363,9 @@
 						placeholder="Select or type branch name"
 						autocomplete="off"
 					/>
-					{#if showDropdown && branches.length > 0}
+					{#if showDropdown && filteredBranchesForBase.length > 0}
 						<div class="dropdown" bind:this={dropdownElement}>
-							{#each branches as branch, index}
+							{#each filteredBranchesForBase as branch, index}
 								<div
 									class="dropdown-item"
 									class:selected={index === selectedIndex}

@@ -142,43 +142,99 @@ export class SessionManager {
 			return sessionInfo;
 		}
 
-		// Normal flow: create new worktree and branch
-		// Check if branch already exists
-		if (this.branchExists(branchName)) {
-			throw new Error(`Branch '${branchName}' already exists`);
-		}
-
+		// Normal flow: create worktree (with or without creating new branch)
 		// Check if worktree path already exists
 		if (existsSync(worktreePath)) {
 			throw new Error(`Worktree directory '${branchName}' already exists`);
 		}
 
 		try {
-			// Create branch and worktree from base branch
-			// Note: git worktree outputs to stderr even on success, so we ignore stderr
-			const result = execSync(`git worktree add "${worktreePath}" -b "${branchName}" "${derivedFrom}"`, {
-				cwd: this.repoRoot,
-				encoding: 'utf8',
-				stdio: ['pipe', 'pipe', 'ignore']
-			});
+			let actualBranchName = branchName;
+			let actualBaseBranch = derivedFrom;
+			let isRemoteBranch = branchName.includes('/');
+			let branchAlreadyExists = this.branchExists(branchName);
+
+			// Case 1: Remote branch (e.g., "origin/feature-xyz")
+			if (isRemoteBranch) {
+				// Extract local branch name by removing remote prefix
+				const parts = branchName.split('/');
+				const remoteName = parts[0]; // e.g., "origin"
+				const localBranchName = parts.slice(1).join('/'); // e.g., "feature-xyz"
+
+				actualBranchName = localBranchName;
+
+				// Check if local tracking branch already exists
+				if (!this.branchExists(localBranchName)) {
+					// Create local tracking branch from remote
+					console.log(`Creating local tracking branch '${localBranchName}' from '${branchName}'`);
+					execSync(`git branch --track "${localBranchName}" "${branchName}"`, {
+						cwd: this.repoRoot,
+						encoding: 'utf8',
+						stdio: ['pipe', 'pipe', 'ignore']
+					});
+				}
+
+				// Create worktree on the local branch
+				console.log(`Creating worktree for local branch '${localBranchName}'`);
+				execSync(`git worktree add "${worktreePath}" "${localBranchName}"`, {
+					cwd: this.repoRoot,
+					encoding: 'utf8',
+					stdio: ['pipe', 'pipe', 'ignore']
+				});
+
+				// Use the remote branch as the base branch
+				actualBaseBranch = branchName;
+
+			// Case 2: Local branch that already exists
+			} else if (branchAlreadyExists) {
+				console.log(`Creating worktree for existing local branch '${branchName}'`);
+
+				// Create worktree without creating a new branch
+				execSync(`git worktree add "${worktreePath}" "${branchName}"`, {
+					cwd: this.repoRoot,
+					encoding: 'utf8',
+					stdio: ['pipe', 'pipe', 'ignore']
+				});
+
+				// Try to read base branch from git config
+				const storedBaseBranch = this.getBaseBranchForBranch(branchName);
+				if (storedBaseBranch) {
+					actualBaseBranch = storedBaseBranch;
+				} else if (baseBranchName) {
+					// Use provided base branch
+					actualBaseBranch = baseBranchName;
+				}
+				// If neither stored nor provided, actualBaseBranch remains as derivedFrom (repo's default)
+
+			// Case 3: New branch that doesn't exist yet
+			} else {
+				console.log(`Creating new branch '${branchName}' from '${derivedFrom}'`);
+
+				// Create new branch and worktree
+				execSync(`git worktree add "${worktreePath}" -b "${branchName}" "${derivedFrom}"`, {
+					cwd: this.repoRoot,
+					encoding: 'utf8',
+					stdio: ['pipe', 'pipe', 'ignore']
+				});
+			}
 
 			const sessionInfo: SessionInfo = {
 				sessionId,
-				branchName,
+				branchName: actualBranchName,
 				worktreePath,
-				baseBranchName: derivedFrom,
+				baseBranchName: actualBaseBranch,
 				baseBranchCommitId: null
 			};
 
 			// Store base branch in git config for persistence
-			this.writeBaseBranchConfig(branchName, derivedFrom, worktreePath);
+			this.writeBaseBranchConfig(actualBranchName, actualBaseBranch, worktreePath);
 
 			this.sessions.set(sessionId, sessionInfo);
 
 			// Initialize base branch commit ID
 			sessionInfo.baseBranchCommitId = this.getBaseBranchCommitId(sessionId);
 
-			console.log(`Created session ${sessionId}: branch=${branchName}, path=${worktreePath}, baseBranch=${derivedFrom}`);
+			console.log(`Created session ${sessionId}: branch=${actualBranchName}, path=${worktreePath}, baseBranch=${actualBaseBranch}`);
 
 			// Sync local files to worktree
 			await this.syncLocalFilesToWorktree(worktreePath);
@@ -188,7 +244,7 @@ export class SessionManager {
 			const errorMessage = error.message || String(error);
 			const stdout = error.stdout || '';
 			console.error(`Git worktree command failed:`);
-			console.error(`  Command: git worktree add "${worktreePath}" -b "${branchName}" "${derivedFrom}"`);
+			console.error(`  Branch: ${branchName}`);
 			console.error(`  CWD: ${this.repoRoot}`);
 			console.error(`  Error: ${errorMessage}`);
 			if (stdout) {
@@ -734,6 +790,31 @@ export class SessionManager {
 		} catch (error) {
 			// Config not set - this is normal for branches without stored base
 			console.log(`[readBaseBranchConfig] Not found: branch.${branchName}.base (will use default)`);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Gets the base branch for an existing branch by reading from git config.
+	 * @param branchName - The branch name to get the base branch for
+	 * @returns The base branch name or null if not set
+	 */
+	getBaseBranchForBranch(branchName: string): string | null {
+		try {
+			const result = execSync(`git config --get "branch.${branchName}.base"`, {
+				cwd: this.repoRoot,
+				encoding: 'utf8',
+				stdio: ['pipe', 'pipe', 'pipe']
+			}).trim();
+
+			if (result) {
+				console.log(`[getBaseBranchForBranch] Found: branch.${branchName}.base = ${result}`);
+				return result;
+			}
+		} catch (error) {
+			// Config not set - this is normal for branches without stored base
+			console.log(`[getBaseBranchForBranch] Not found: branch.${branchName}.base`);
 		}
 
 		return null;

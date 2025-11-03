@@ -141,7 +141,7 @@ function initWebSocketServer() {
 					ws.send(JSON.stringify({
 						type: 'created',
 						sessionId,
-						branchName,
+						branchName: sessionInfo.branchName,
 						baseBranchName: sessionInfo.baseBranchName
 					}));
 						} catch (error: any) {
@@ -630,6 +630,37 @@ function initWebSocketServer() {
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
 							console.error('Failed to list branches:', errorMessage);
+							ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
+						}
+						break;
+
+					case 'getBaseBranch':
+						try {
+							if (!data.repoPath) {
+								ws.send(JSON.stringify({ type: 'error', error: 'Repository path is required' }));
+								break;
+							}
+
+							if (!data.branchName) {
+								ws.send(JSON.stringify({ type: 'error', error: 'Branch name is required' }));
+								break;
+							}
+
+							// Get or create SessionManager for this repository
+							const sessionManager = repositoryRegistry.getOrCreateRepository(data.repoPath);
+
+							// Get base branch for the specified branch
+							const baseBranch = sessionManager.getBaseBranchForBranch(data.branchName);
+
+							// Send result back to client
+							ws.send(JSON.stringify({
+								type: 'baseBranch',
+								branchName: data.branchName,
+								baseBranchName: baseBranch
+							}));
+						} catch (error: any) {
+							const errorMessage = error.message || String(error);
+							console.error('Failed to get base branch:', errorMessage);
 							ws.send(JSON.stringify({ type: 'error', error: errorMessage }));
 						}
 						break;
