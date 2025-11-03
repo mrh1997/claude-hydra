@@ -183,6 +183,7 @@
 	}
 
 	function handleBranchNameFocus() {
+		inputElement.select();
 		if (filteredBranchesForInput.length > 0) {
 			showBranchDropdown = true;
 			selectedBranchIndex = -1;
@@ -262,6 +263,7 @@
 	}
 
 	function handleBaseBranchFocus() {
+		baseBranchInputElement.select();
 		if (filteredBranchesForBase.length > 0) {
 			showDropdown = true;
 			selectedIndex = -1;
