@@ -28,6 +28,7 @@ export class PtyManager {
 	private claudePath: string | null = null;
 	private repositoryRegistry: RepositoryRegistry;
 	private mergingSessions = new Set<string>(); // Track sessions being merged
+	private destroyedSessions = new Set<string>(); // Track destroyed sessions
 
 	constructor(repositoryRegistry: RepositoryRegistry) {
 		this.repositoryRegistry = repositoryRegistry;
@@ -383,15 +384,23 @@ export class PtyManager {
 			},
 			onExit: () => {
 				this.sessions.delete(sessionId);
-				onExit(sessionId);
+				// Only send exit message if this was NOT an intentional destroy
+				// Intentional destroys are tracked in destroyedSessions and mergingSessions
+				const isIntentionalDestroy = this.destroyedSessions.has(sessionId) || this.mergingSessions.has(sessionId);
+				if (!isIntentionalDestroy) {
+					onExit(sessionId);
+				}
 				// Don't auto-destroy session - let frontend handle cleanup
 				// Session will be destroyed via:
 				// - merge flow (merge destroys session after commit/rebase)
 				// - discard flow (tab removal sends 'destroy' message)
 				// - WebSocket close (guaranteed cleanup for crashes/disconnects)
-				// Clean up mergingSessions tracking if this was a merge operation
+				// Clean up tracking sets
 				if (this.mergingSessions.has(sessionId)) {
 					this.mergingSessions.delete(sessionId);
+				}
+				if (this.destroyedSessions.has(sessionId)) {
+					this.destroyedSessions.delete(sessionId);
 				}
 			}
 		};
@@ -439,8 +448,14 @@ export class PtyManager {
 		}
 	}
 
-	destroy(sessionId: string, skipWorktreeCleanup: boolean = false): void {
-		console.log(`[pty-manager.destroy] Called for sessionId=${sessionId}, skipWorktreeCleanup=${skipWorktreeCleanup}`);
+	isDestroyed(sessionId: string): boolean {
+		return this.destroyedSessions.has(sessionId);
+	}
+
+	destroy(sessionId: string, skipWorktreeCleanup: boolean = false, keepBranch: boolean = false): void {
+		// Mark session as destroyed immediately to prevent further operations
+		this.destroyedSessions.add(sessionId);
+		console.log(`[pty-manager.destroy] Called for sessionId=${sessionId}, skipWorktreeCleanup=${skipWorktreeCleanup}, keepBranch=${keepBranch}`);
 
 		const session = this.sessions.get(sessionId);
 		if (session) {
@@ -473,8 +488,8 @@ export class PtyManager {
 							try {
 								const sessionManager = this.repositoryRegistry.getRepositoryBySessionId(sessionId);
 								if (sessionManager) {
-									console.log(`[pty-manager.destroy] Calling sessionManager.destroySession for ${sessionId}`);
-									sessionManager.destroySession(sessionId);
+									console.log(`[pty-manager.destroy] Calling sessionManager.destroySession for ${sessionId}, keepBranch=${keepBranch}`);
+									sessionManager.destroySession(sessionId, keepBranch);
 								} else {
 									console.warn(`[pty-manager.destroy] No sessionManager found for session ${sessionId}`);
 								}

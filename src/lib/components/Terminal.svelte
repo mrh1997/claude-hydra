@@ -315,6 +315,14 @@
 						dispatch('requestClose', { terminalId });
 						break;
 
+					case 'discardAndClose':
+						dispatch('discardAndClose', { terminalId });
+						break;
+
+					case 'keepBranchAndClose':
+						dispatch('keepBranchAndClose', { terminalId });
+						break;
+
 					case 'exit':
 						dispatch('exit', { terminalId });
 						break;

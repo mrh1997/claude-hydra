@@ -715,14 +715,24 @@ function initWebSocketServer() {
 
 					case 'destroy':
 						// Destroy terminal session
-						if (sessionId) {
+						// Use sessionId from message data if provided (for temporary WebSockets),
+						// otherwise use the connection's sessionId (for main Terminal WebSocket)
+						const destroySessionId = data.sessionId || sessionId;
+						if (destroySessionId) {
+							if (ptyManager.isDestroyed(destroySessionId)) {
+								console.log(`[WebSocket] Ignoring duplicate 'destroy' message for already destroyed session ${destroySessionId}`);
+								break;
+							}
 							// Check if we should preserve the worktree (default: false for backward compatibility)
 							const preserveWorktree = data.preserveWorktree || false;
-							console.log(`[hooks.server.ts] Received destroy message for sessionId=${sessionId}, preserveWorktree=${preserveWorktree}, raw value=${data.preserveWorktree}`);
-							ptyManager.destroy(sessionId, preserveWorktree);
-							sessionId = null;
-						} else {
-							console.warn(`[hooks.server.ts] Received destroy message but sessionId is null`);
+							// Check if we should keep the branch (default: false)
+							const keepBranch = data.keepBranch || false;
+							console.log(`[WebSocket] Destroying session ${destroySessionId} (preserveWorktree=${preserveWorktree}, keepBranch=${keepBranch})`);
+							ptyManager.destroy(destroySessionId, preserveWorktree, keepBranch);
+							// Only null out the connection's sessionId if we destroyed this connection's session
+							if (sessionId === destroySessionId) {
+								sessionId = null;
+							}
 						}
 						break;
 				}
@@ -732,14 +742,13 @@ function initWebSocketServer() {
 		});
 
 		ws.on('close', () => {
-			console.log('WebSocket client disconnected');
-			if (sessionId) {
-				// Preserve worktree on disconnect for auto-restore on next startup
-				// The PTY process is killed, but the worktree/branch is preserved
-				ptyManager.destroy(sessionId, true);
-			}
+			console.log(`[WebSocket] Client disconnected (sessionId=${sessionId}, branchName=${branchName})`);
+			// NOTE: All destroy logic is handled by explicit 'destroy' message handler.
+			// The close handler ONLY cleans up the WebSocket connection registration.
+			// Do NOT call ptyManager.destroy() here to avoid conflicting with the destroy message handler.
 			if (branchName) {
 				unregisterConnection(branchName);
+				console.log(`[WebSocket] Unregistered connection for branch: ${branchName}`);
 			}
 		});
 

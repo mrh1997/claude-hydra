@@ -203,8 +203,8 @@ export class SessionManager {
 	 * @param sessionId - Session identifier to destroy
 	 * @throws Error if worktree cleanup fails
 	 */
-	destroySession(sessionId: string): void {
-		console.log(`[session-manager.destroySession] Starting cleanup for sessionId=${sessionId}`);
+	destroySession(sessionId: string, keepBranch: boolean = false): void {
+		console.log(`[session-manager.destroySession] Starting cleanup for sessionId=${sessionId}, keepBranch=${keepBranch}`);
 
 		const session = this.sessions.get(sessionId);
 		if (!session) {
@@ -213,6 +213,26 @@ export class SessionManager {
 		}
 
 		console.log(`[session-manager.destroySession] Session details: branchName=${session.branchName}, worktreePath=${session.worktreePath}`);
+
+		// If keepBranch is true, commit any uncommitted changes as WIP
+		if (keepBranch) {
+			const gitStatus = this.getGitStatus(sessionId);
+			if (gitStatus.hasUncommittedChanges) {
+				try {
+					execSync('git add -A', {
+						cwd: session.worktreePath,
+						stdio: 'pipe'
+					});
+					execSync('git commit -m "WIP"', {
+						cwd: session.worktreePath,
+						stdio: 'pipe'
+					});
+					console.log(`[session-manager.destroySession] Created WIP commit for session ${sessionId}`);
+				} catch (error) {
+					console.error(`[session-manager.destroySession] Failed to create WIP commit: ${error}`);
+				}
+			}
+		}
 
 		let worktreeRemoved = false;
 
@@ -262,20 +282,26 @@ export class SessionManager {
 			throw new Error(`Failed to remove worktree at ${session.worktreePath}. Please close any programs accessing this directory and try again.`);
 		}
 
-		// Only delete branch if worktree was successfully removed
-		console.log(`[session-manager.destroySession] Worktree removed successfully, now deleting branch: ${session.branchName}`);
-		try {
-			console.log(`[session-manager.destroySession] Executing: git branch -D "${session.branchName}"`);
-			execSync(`git branch -D "${session.branchName}"`, {
-				cwd: this.repoRoot,
-				stdio: 'pipe'
-			});
+		// Only delete branch if worktree was successfully removed AND keepBranch is false
+		if (!keepBranch) {
+			console.log(`[session-manager.destroySession] Worktree removed successfully, now deleting branch: ${session.branchName}`);
+			try {
+				console.log(`[session-manager.destroySession] Executing: git branch -D "${session.branchName}"`);
+				execSync(`git branch -D "${session.branchName}"`, {
+					cwd: this.repoRoot,
+					stdio: 'pipe'
+				});
 
+				this.sessions.delete(sessionId);
+				console.log(`[session-manager.destroySession] SUCCESS: Destroyed session ${sessionId}: branch=${session.branchName} deleted`);
+			} catch (error) {
+				console.error(`[session-manager.destroySession] FAILED: Error deleting branch ${session.branchName}:`, error);
+				throw new Error(`Worktree removed but failed to delete branch ${session.branchName}`);
+			}
+		} else {
+			// Keep branch but clean up session tracking
 			this.sessions.delete(sessionId);
-			console.log(`[session-manager.destroySession] SUCCESS: Destroyed session ${sessionId}: branch=${session.branchName}`);
-		} catch (error) {
-			console.error(`[session-manager.destroySession] FAILED: Error deleting branch ${session.branchName}:`, error);
-			throw new Error(`Worktree removed but failed to delete branch ${session.branchName}`);
+			console.log(`[session-manager.destroySession] SUCCESS: Destroyed session ${sessionId}: worktree removed, branch ${session.branchName} PRESERVED`);
 		}
 	}
 

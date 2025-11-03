@@ -155,6 +155,24 @@ export function sendCloseTabRequest(branchName: string): boolean {
 	return false;
 }
 
+export function sendDiscardAndCloseRequest(branchName: string): boolean {
+	const ws = branchConnections.get(branchName);
+	if (ws && ws.readyState === ws.OPEN) {
+		ws.send(JSON.stringify({ type: 'discardAndClose' }));
+		return true;
+	}
+	return false;
+}
+
+export function sendKeepBranchAndCloseRequest(branchName: string): boolean {
+	const ws = branchConnections.get(branchName);
+	if (ws && ws.readyState === ws.OPEN) {
+		ws.send(JSON.stringify({ type: 'keepBranchAndClose' }));
+		return true;
+	}
+	return false;
+}
+
 export function sendWaituserRequest(branchName: string, text: string, commandline: string): boolean {
 	const ws = branchConnections.get(branchName);
 	if (ws && ws.readyState === ws.OPEN) {

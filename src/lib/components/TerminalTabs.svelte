@@ -312,6 +312,31 @@
 		}
 	}
 
+	async function handleCloseDialogKeepBranch() {
+		showCloseDialog = false;
+		if (!pendingCloseTabId) return;
+
+		const tab = $terminals.find(t => t.id === pendingCloseTabId);
+		if (tab && tab.sessionId) {
+			// Send destroy message with keepBranch flag
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+			ws.onopen = () => {
+				ws.send(JSON.stringify({ type: 'destroy', sessionId: tab.sessionId, keepBranch: true }));
+				ws.close();
+			};
+
+			// Wait a bit for operations to complete, then close tab
+			setTimeout(() => {
+				terminals.removeTab(pendingCloseTabId!, false);
+				pendingCloseTabId = null;
+			}, 500);
+		} else {
+			// No session, just close
+			terminals.removeTab(pendingCloseTabId, false);
+			pendingCloseTabId = null;
+		}
+	}
+
 	async function handleCloseDialogRestart() {
 		showCloseDialog = false;
 		if (!pendingCloseTabId) return;
@@ -463,6 +488,7 @@
 	isExit={isExitClose}
 	focusStack={activeFocusStack}
 	on:discard={handleCloseDialogDiscard}
+	on:keepBranch={handleCloseDialogKeepBranch}
 	on:restart={handleCloseDialogRestart}
 	on:cancel={handleCloseDialogCancel}
 />

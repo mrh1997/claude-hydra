@@ -31,6 +31,10 @@
 		dispatch('discard');
 	}
 
+	function handleKeepBranch() {
+		dispatch('keepBranch');
+	}
+
 	function handleRestart() {
 		dispatch('restart');
 	}
@@ -100,7 +104,8 @@
 					<button bind:this={primaryButton} class="primary" on:click={handleRestart}>Restart Claude</button>
 				{:else}
 					<button class="cancel" on:click={handleCancel}>Cancel</button>
-					<button bind:this={primaryButton} class="warning" on:click={handleDiscard}>Discard Everything</button>
+					<button class="warning" on:click={handleDiscard}>Discard</button>
+					<button bind:this={primaryButton} class="keep-branch" on:click={handleKeepBranch} title="Worktree will be deleted">Keep Branch</button>
 				{/if}
 			</div>
 		</div>
@@ -183,5 +188,14 @@
 
 	.warning:hover {
 		background-color: #8a4400;
+	}
+
+	.keep-branch {
+		background-color: #007acc;
+		color: #ffffff;
+	}
+
+	.keep-branch:hover {
+		background-color: #005a9e;
 	}
 </style>

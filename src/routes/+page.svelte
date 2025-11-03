@@ -389,6 +389,44 @@
 		terminals.removeTab(event.detail.terminalId, false);
 	}
 
+	async function handleDiscardAndClose(event: CustomEvent<{ terminalId: string }>) {
+		// Discard everything and close the tab
+		const tab = $terminals.find(t => t.id === event.detail.terminalId);
+		if (tab && tab.sessionId) {
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+			ws.onopen = () => {
+				// First discard uncommitted changes
+				ws.send(JSON.stringify({ type: 'discardChanges', sessionId: tab.sessionId }));
+				// Then reset to base (undo unmerged commits)
+				ws.send(JSON.stringify({ type: 'resetToBase', sessionId: tab.sessionId }));
+				ws.close();
+			};
+
+			// Wait for operations to complete, then close tab
+			setTimeout(() => {
+				terminals.removeTab(event.detail.terminalId, false);
+			}, 500);
+		}
+	}
+
+	async function handleKeepBranchAndClose(event: CustomEvent<{ terminalId: string }>) {
+		// Keep branch and close the tab
+		const tab = $terminals.find(t => t.id === event.detail.terminalId);
+		if (tab && tab.sessionId) {
+			const ws = new WebSocket(`ws://localhost:${websocketPort}`);
+			ws.onopen = () => {
+				// Send destroy message with keepBranch flag
+				ws.send(JSON.stringify({ type: 'destroy', sessionId: tab.sessionId, keepBranch: true }));
+				ws.close();
+			};
+
+			// Wait for operations to complete, then close tab
+			setTimeout(() => {
+				terminals.removeTab(event.detail.terminalId, false);
+			}, 500);
+		}
+	}
+
 	$: activeTerminal = $terminals.find(t => t.active);
 	$: activeBranchName = activeTerminal ? (terminalData.get(activeTerminal.id) || activeTerminal.branchName) : null;
 	$: pageTitle = activeBranchName ? `${activeBranchName} - Claude Hydra` : 'Claude Hydra';
@@ -433,6 +471,8 @@
 						derivedFromBranch={tab.derivedFromBranch}
 						on:exit={handleTerminalExit}
 						on:requestClose={handleRequestClose}
+						on:discardAndClose={handleDiscardAndClose}
+						on:keepBranchAndClose={handleKeepBranchAndClose}
 					/>
 				{/each}
 			{/if}
