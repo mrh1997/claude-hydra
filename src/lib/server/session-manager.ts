@@ -31,6 +31,7 @@ export class SessionManager {
 	private baseDir: string;
 	private repoRoot: string;
 	private baseBranch: string;
+	private repoHash: string;
 	private sessions: Map<string, SessionInfo>;
 
 	constructor(repoPath: string) {
@@ -61,8 +62,8 @@ export class SessionManager {
 		// Format: ~/.claude-hydra/<repo-name>-<hash>
 		const repoName = basename(this.repoRoot);
 		const normalizedPath = this.normalizePathForHash(this.repoRoot);
-		const repoHash = createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
-		this.baseDir = join(homedir(), '.claude-hydra', `${repoName}-${repoHash}`);
+		this.repoHash = createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
+		this.baseDir = join(homedir(), '.claude-hydra', `${repoName}-${this.repoHash}`);
 		if (!existsSync(this.baseDir)) {
 			mkdirSync(this.baseDir, { recursive: true });
 		}
@@ -71,6 +72,7 @@ export class SessionManager {
 		console.log(`  Repository: ${this.repoRoot}`);
 		console.log(`  Base branch: ${this.baseBranch}`);
 		console.log(`  Base directory: ${this.baseDir}`);
+		console.log(`  Repo hash: ${this.repoHash}`);
 	}
 
 	/**
@@ -86,6 +88,14 @@ export class SessionManager {
 		const resolved = resolve(repoPath);
 		// Uppercase on Windows for case-insensitive filesystem consistency
 		return process.platform === 'win32' ? resolved.toUpperCase() : resolved;
+	}
+
+	/**
+	 * Gets the repository hash used for uniquely identifying this repository.
+	 * @returns The 8-character MD5 hash of the normalized repository path
+	 */
+	getRepoHash(): string {
+		return this.repoHash;
 	}
 
 	/**

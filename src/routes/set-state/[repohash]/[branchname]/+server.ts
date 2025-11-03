@@ -4,7 +4,7 @@ import { sendStateUpdate, sendReadyStateWithGitStatus, sendCloseTabRequest, send
 import { getRepositoryRegistry } from '$lib/server/session-manager-instance';
 
 export const POST: RequestHandler = async ({ params, request }) => {
-	const { branchname } = params;
+	const { repohash, branchname } = params;
 	const body = await request.json();
 	const { state, text, commandline, mode } = body;
 
@@ -18,26 +18,26 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'waituser state requires commandline parameter' }, { status: 400 });
 	}
 
-	// Send state update to the WebSocket connection for this branch
+	// Send state update to the WebSocket connection for this repository+branch combination
 	let sent: boolean;
 	if (state === 'ready') {
 		// Use shared function that updates both state and git status
-		sent = sendReadyStateWithGitStatus(branchname);
+		sent = sendReadyStateWithGitStatus(repohash, branchname);
 	} else if (state === 'close') {
 		// Handle close with optional mode parameter
 		if (mode === 'discard') {
 			// Discard everything and close immediately
-			sent = sendDiscardAndCloseRequest(branchname);
+			sent = sendDiscardAndCloseRequest(repohash, branchname);
 		} else if (mode === 'keep-branch') {
 			// Keep branch and close
-			sent = sendKeepBranchAndCloseRequest(branchname);
+			sent = sendKeepBranchAndCloseRequest(repohash, branchname);
 		} else {
 			// For 'close' state without mode, check git status and only close if clean
 			const registry = getRepositoryRegistry();
-			const sessionId = registry.getSessionIdByBranch(branchname);
+			const sessionId = registry.getSessionIdByRepoHashAndBranch(repohash, branchname);
 
 			if (!sessionId) {
-				return json({ error: 'No active session for this branch' }, { status: 404 });
+				return json({ error: 'No active session for this repository and branch' }, { status: 404 });
 			}
 
 			const sessionManager = registry.getRepositoryBySessionId(sessionId);
@@ -52,7 +52,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				if (!gitStatus.hasUncommittedChanges && !gitStatus.hasUnmergedCommits) {
 					// Check if base branch has changed (merge likely occurred)
 					// This will update the stored base branch commit ID
-					const baseBranchChanged = sessionManager.checkAndUpdateBaseBranch();
+					const baseBranchChanged = sessionManager.checkAndUpdateBaseBranch(sessionId);
 
 					if (baseBranchChanged) {
 						// Base branch changed - broadcast git status to all remaining tabs
@@ -60,12 +60,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
 						console.log('Base branch changed after merge - broadcasting git status to all tabs');
 						const { broadcastGitStatusToAll } = await import('$lib/server/websocket-manager');
 						broadcastGitStatusToAll(
+							repohash,
 							sessionManager.getAllSessions(),
 							(sid) => sessionManager.getGitStatus(sid)
 						);
 					}
 
-					sent = sendCloseTabRequest(branchname);
+					sent = sendCloseTabRequest(repohash, branchname);
 				} else {
 					// Don't close if there are uncommitted changes or unmerged commits
 					return json({ success: false, message: 'Tab not closed due to uncommitted changes or unmerged commits' });
@@ -76,14 +77,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 	} else if (state === 'waituser') {
 		// For 'waituser' state, send waituser request with text and commandline
-		sent = sendWaituserRequest(branchname, text || commandline, commandline);
+		sent = sendWaituserRequest(repohash, branchname, text || commandline, commandline);
 	} else {
 		// For 'running' state, just send state update
-		sent = sendStateUpdate(branchname, state);
+		sent = sendStateUpdate(repohash, branchname, state);
 	}
 
 	if (!sent) {
-		return json({ error: 'No active session for this branch' }, { status: 404 });
+		return json({ error: 'No active session for this repository and branch' }, { status: 404 });
 	}
 
 	return json({ success: true });

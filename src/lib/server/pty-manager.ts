@@ -346,11 +346,15 @@ export class PtyManager {
 		// Get the full path to claude executable
 		const claudePath = this.getClaudePath();
 
-		// Prepare environment with CLAUDE_HYDRA_BASEURL and CLAUDE_HYDRA_BASE_BRANCH
+		// Get repository hash for unique identification
+		const repoHash = sessionManager.getRepoHash();
+
+		// Prepare environment with CLAUDE_HYDRA_BASEURL, CLAUDE_HYDRA_BASE_BRANCH, and CLAUDE_HYDRA_REPO_HASH
 		const env = {
 			...process.env,
 			CLAUDE_HYDRA_BASEURL: baseUrl,
-			CLAUDE_HYDRA_BASE_BRANCH: sessionInfo.baseBranchName
+			CLAUDE_HYDRA_BASE_BRANCH: sessionInfo.baseBranchName,
+			CLAUDE_HYDRA_REPO_HASH: repoHash
 		} as { [key: string]: string };
 
 		// Prepare arguments: add --continue flag only when adopting existing session
@@ -377,7 +381,7 @@ export class PtyManager {
 				// Scan for ">" prompt when waiting for initial prompt
 				if (session.waitForPrompt && data.includes('>')) {
 					session.waitForPrompt = false;
-					sendReadyStateWithGitStatus(branchName);
+					sendReadyStateWithGitStatus(repoHash, branchName);
 				}
 				// Forward data to client
 				onData(sessionId, data);
@@ -434,7 +438,12 @@ export class PtyManager {
 			// Detect bare ESC key press (not escape sequences like \x1b[O)
 			// Bare ESC = exactly '\x1b', not followed by control sequence characters
 			if (data === '\x1b') {
-				sendReadyStateWithGitStatus(session.branchName);
+				// Get repoHash from session manager
+				const sessionManager = this.repositoryRegistry.getRepositoryBySessionId(sessionId);
+				if (sessionManager) {
+					const repoHash = sessionManager.getRepoHash();
+					sendReadyStateWithGitStatus(repoHash, session.branchName);
+				}
 			}
 
 			session.ptyProcess.write(data);

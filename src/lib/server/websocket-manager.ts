@@ -7,20 +7,30 @@ declare global {
 	var __branchConnections: Map<string, WebSocket> | null;
 }
 
-// Map branchname to WebSocket connection
+// Map "repoHash:branchName" to WebSocket connection for unique tab identification
 const branchConnections = globalThis.__branchConnections || new Map<string, WebSocket>();
 globalThis.__branchConnections = branchConnections;
 
-export function registerConnection(branchName: string, ws: WebSocket) {
-	branchConnections.set(branchName, ws);
+/**
+ * Creates a unique connection key from repoHash and branchName
+ */
+function makeConnectionKey(repoHash: string, branchName: string): string {
+	return `${repoHash}:${branchName}`;
 }
 
-export function unregisterConnection(branchName: string) {
-	branchConnections.delete(branchName);
+export function registerConnection(repoHash: string, branchName: string, ws: WebSocket) {
+	const key = makeConnectionKey(repoHash, branchName);
+	branchConnections.set(key, ws);
 }
 
-export function sendStateUpdate(branchName: string, state: 'ready' | 'running'): boolean {
-	const ws = branchConnections.get(branchName);
+export function unregisterConnection(repoHash: string, branchName: string) {
+	const key = makeConnectionKey(repoHash, branchName);
+	branchConnections.delete(key);
+}
+
+export function sendStateUpdate(repoHash: string, branchName: string, state: 'ready' | 'running'): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
 		ws.send(JSON.stringify({ type: 'state', state }));
 		return true;
@@ -28,8 +38,9 @@ export function sendStateUpdate(branchName: string, state: 'ready' | 'running'):
 	return false;
 }
 
-export function sendGitBranchStatus(branchName: string, gitStatus: GitStatus, commitLog?: CommitInfo[]): boolean {
-	const ws = branchConnections.get(branchName);
+export function sendGitBranchStatus(repoHash: string, branchName: string, gitStatus: GitStatus, commitLog?: CommitInfo[]): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
 		const message: any = { type: 'gitBranchStatus', gitStatus };
 		if (commitLog !== undefined) {
@@ -41,20 +52,20 @@ export function sendGitBranchStatus(branchName: string, gitStatus: GitStatus, co
 	return false;
 }
 
-export function broadcastGitStatusToAll(sessions: Map<string, SessionInfo>, getGitStatus: (sessionId: string) => GitStatus): void {
+export function broadcastGitStatusToAll(repoHash: string, sessions: Map<string, SessionInfo>, getGitStatus: (sessionId: string) => GitStatus): void {
 	for (const [sessionId, session] of sessions) {
 		try {
 			const gitStatus = getGitStatus(sessionId);
-			sendGitBranchStatus(session.branchName, gitStatus);
+			sendGitBranchStatus(repoHash, session.branchName, gitStatus);
 		} catch (error) {
 			console.error(`Failed to broadcast git status for session ${sessionId}:`, error);
 		}
 	}
 }
 
-export function sendReadyStateWithGitStatus(branchName: string): boolean {
+export function sendReadyStateWithGitStatus(repoHash: string, branchName: string): boolean {
 	// Send state update
-	const sent = sendStateUpdate(branchName, 'ready');
+	const sent = sendStateUpdate(repoHash, branchName, 'ready');
 
 	if (!sent) {
 		return false;
@@ -62,7 +73,7 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 
 	// Check if base branch has changed and get the session manager
 	const registry = getRepositoryRegistry();
-	const sessionId = registry.getSessionIdByBranch(branchName);
+	const sessionId = registry.getSessionIdByRepoHashAndBranch(repoHash, branchName);
 	if (sessionId) {
 		const sessionManager = registry.getRepositoryBySessionId(sessionId);
 		if (sessionManager) {
@@ -92,7 +103,7 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 									console.error(`Failed to get commit log for session ${sid}:`, commitLogError);
 								}
 
-								sendGitBranchStatus(session.branchName, gitStatus, commitLog);
+								sendGitBranchStatus(repoHash, session.branchName, gitStatus, commitLog);
 							} catch (error) {
 								console.error(`Failed to broadcast git status for session ${sid}:`, error);
 							}
@@ -113,7 +124,7 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 									console.error(`Failed to get commit log for session ${sid}:`, commitLogError);
 								}
 
-								sendGitBranchStatus(session.branchName, gitStatus, commitLog);
+								sendGitBranchStatus(repoHash, session.branchName, gitStatus, commitLog);
 								console.log(`Updated terminal for base branch ${changedBaseBranch} itself (session ${sid})`);
 							} catch (error) {
 								console.error(`Failed to update base branch terminal ${sid}:`, error);
@@ -135,7 +146,7 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 						// Continue anyway - we can still send the git status without commit log
 					}
 
-					sendGitBranchStatus(branchName, gitStatus, commitLog);
+					sendGitBranchStatus(repoHash, branchName, gitStatus, commitLog);
 				} catch (error) {
 					console.error(`Failed to get git status for branch ${branchName}:`, error);
 				}
@@ -146,8 +157,9 @@ export function sendReadyStateWithGitStatus(branchName: string): boolean {
 	return true;
 }
 
-export function sendCloseTabRequest(branchName: string): boolean {
-	const ws = branchConnections.get(branchName);
+export function sendCloseTabRequest(repoHash: string, branchName: string): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
 		ws.send(JSON.stringify({ type: 'closeTab' }));
 		return true;
@@ -155,8 +167,9 @@ export function sendCloseTabRequest(branchName: string): boolean {
 	return false;
 }
 
-export function sendDiscardAndCloseRequest(branchName: string): boolean {
-	const ws = branchConnections.get(branchName);
+export function sendDiscardAndCloseRequest(repoHash: string, branchName: string): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
 		ws.send(JSON.stringify({ type: 'discardAndClose' }));
 		return true;
@@ -164,8 +177,9 @@ export function sendDiscardAndCloseRequest(branchName: string): boolean {
 	return false;
 }
 
-export function sendKeepBranchAndCloseRequest(branchName: string): boolean {
-	const ws = branchConnections.get(branchName);
+export function sendKeepBranchAndCloseRequest(repoHash: string, branchName: string): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
 		ws.send(JSON.stringify({ type: 'keepBranchAndClose' }));
 		return true;
@@ -173,8 +187,9 @@ export function sendKeepBranchAndCloseRequest(branchName: string): boolean {
 	return false;
 }
 
-export function sendWaituserRequest(branchName: string, text: string, commandline: string): boolean {
-	const ws = branchConnections.get(branchName);
+export function sendWaituserRequest(repoHash: string, branchName: string, text: string, commandline: string): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
 		ws.send(JSON.stringify({ type: 'waituser', text, commandline }));
 		return true;

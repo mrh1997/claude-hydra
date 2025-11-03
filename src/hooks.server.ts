@@ -59,6 +59,7 @@ function initWebSocketServer() {
 		console.log('WebSocket client connected');
 		let sessionId: string | null = null;
 		let branchName: string | null = null;
+		let repoHash: string | null = null;
 
 		ws.on('message', async (message) => {
 			try {
@@ -118,20 +119,25 @@ function initWebSocketServer() {
 						// Extract sessionId from sessionInfo
 						sessionId = sessionInfo.sessionId;
 
-						// Register this connection with the branch name
+						// Get repository hash for unique tab identification
+						const sessionManager = repositoryRegistry.getRepositoryBySessionId(sessionId);
+						if (!sessionManager) {
+							ws.send(JSON.stringify({ type: 'error', message: 'Session manager not found' }));
+							return;
+						}
+						repoHash = sessionManager.getRepoHash();
+
+						// Register this connection with the repo hash and branch name
 						// At this point branchName is guaranteed to be non-null
-						registerConnection(branchName!, ws);
+						registerConnection(repoHash, branchName!, ws);
 
 						// When adopting existing worktree, send initial git status immediately
 						// (connection must be registered first for the message to be sent)
 						if (adoptExisting) {
 							try {
-								const sessionManager = repositoryRegistry.getRepositoryBySessionId(sessionId);
-								if (sessionManager) {
-									const gitStatus = sessionManager.getGitStatus(sessionId);
-									const commitLog = sessionManager.getCommitLog(sessionId);
-									sendGitBranchStatus(branchName!, gitStatus, commitLog);
-								}
+								const gitStatus = sessionManager.getGitStatus(sessionId);
+								const commitLog = sessionManager.getCommitLog(sessionId);
+								sendGitBranchStatus(repoHash, branchName!, gitStatus, commitLog);
 							} catch (error) {
 								console.error(`Failed to send initial git status for ${branchName}:`, error);
 							}
@@ -176,9 +182,10 @@ function initWebSocketServer() {
 									const gitStatus = sessionManager.getGitStatus(statusSessionId);
 									const commitLog = sessionManager.getCommitLog(statusSessionId);
 									const targetBranch = ptyManager.getBranchName(statusSessionId);
+									const targetRepoHash = sessionManager.getRepoHash();
 									if (targetBranch) {
 										// Use broadcast mechanism to send git status with commit log
-										sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+										sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 									}
 								}
 							} catch (error: any) {
@@ -204,8 +211,9 @@ function initWebSocketServer() {
 										const gitStatus = sessionManager.getGitStatus(discardSessionId);
 										const commitLog = sessionManager.getCommitLog(discardSessionId);
 										const targetBranch = ptyManager.getBranchName(discardSessionId);
+										const targetRepoHash = sessionManager.getRepoHash();
 										if (targetBranch) {
-											sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+											sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 										}
 									} catch (error) {
 										console.error('Failed to send git status after discard:', error);
@@ -230,8 +238,9 @@ function initWebSocketServer() {
 										const gitStatus = sessionManager.getGitStatus(resetSessionId);
 										const commitLog = sessionManager.getCommitLog(resetSessionId);
 										const targetBranch = ptyManager.getBranchName(resetSessionId);
+										const targetRepoHash = sessionManager.getRepoHash();
 										if (targetBranch) {
-											sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+											sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 										}
 									} catch (error) {
 										console.error('Failed to send git status after reset:', error);
@@ -357,8 +366,9 @@ function initWebSocketServer() {
 											const gitStatus = sessionManager.getGitStatus(deleteSessionId);
 											const commitLog = sessionManager.getCommitLog(deleteSessionId);
 											const targetBranch = ptyManager.getBranchName(deleteSessionId);
+											const targetRepoHash = sessionManager.getRepoHash();
 											if (targetBranch) {
-												sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+												sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 											}
 										} catch (error) {
 											console.error('Failed to refresh file list after delete:', error);
@@ -397,8 +407,9 @@ function initWebSocketServer() {
 											const gitStatus = sessionManager.getGitStatus(createSessionId);
 											const commitLog = sessionManager.getCommitLog(createSessionId);
 											const targetBranch = ptyManager.getBranchName(createSessionId);
+											const targetRepoHash = sessionManager.getRepoHash();
 											if (targetBranch) {
-												sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+												sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 											}
 										} catch (error) {
 											console.error('Failed to refresh file list after create:', error);
@@ -450,8 +461,9 @@ function initWebSocketServer() {
 										const gitStatus = sessionManager.getGitStatus(saveSessionId);
 										const commitLog = sessionManager.getCommitLog(saveSessionId);
 										const targetBranch = ptyManager.getBranchName(saveSessionId);
+										const targetRepoHash = sessionManager.getRepoHash();
 										if (targetBranch) {
-											sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+											sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 										}
 									} catch (error) {
 										console.error('Failed to send git status after save:', error);
@@ -480,8 +492,9 @@ function initWebSocketServer() {
 										const gitStatus = sessionManager.getGitStatus(discardFileSessionId);
 										const commitLog = sessionManager.getCommitLog(discardFileSessionId);
 										const targetBranch = ptyManager.getBranchName(discardFileSessionId);
+										const targetRepoHash = sessionManager.getRepoHash();
 										if (targetBranch) {
-											sendGitBranchStatus(targetBranch, gitStatus, commitLog);
+											sendGitBranchStatus(targetRepoHash, targetBranch, gitStatus, commitLog);
 										}
 
 										// Send updated file diff
@@ -724,11 +737,12 @@ function initWebSocketServer() {
 									const allSessions = sessionManager.getAllSessions();
 
 									// Broadcast status to all sessions with commit log
+									const repoHash = sessionManager.getRepoHash();
 									for (const [sid, session] of allSessions) {
 										try {
 											const gitStatus = sessionManager.getGitStatus(sid);
 											const commitLog = sessionManager.getCommitLog(sid);
-											sendGitBranchStatus(session.branchName, gitStatus, commitLog);
+											sendGitBranchStatus(repoHash, session.branchName, gitStatus, commitLog);
 										} catch (error) {
 											console.error(`Failed to broadcast git status for session ${sid}:`, error);
 										}
@@ -777,8 +791,8 @@ function initWebSocketServer() {
 			// NOTE: All destroy logic is handled by explicit 'destroy' message handler.
 			// The close handler ONLY cleans up the WebSocket connection registration.
 			// Do NOT call ptyManager.destroy() here to avoid conflicting with the destroy message handler.
-			if (branchName) {
-				unregisterConnection(branchName);
+			if (branchName && repoHash) {
+				unregisterConnection(repoHash, branchName);
 				console.log(`[WebSocket] Unregistered connection for branch: ${branchName}`);
 			}
 		});

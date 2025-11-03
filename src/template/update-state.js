@@ -39,8 +39,14 @@ if (!baseUrl) {
   process.exit(1);
 }
 
-// Construct the full URL
-const url = `${baseUrl}/set-state/${encodeURIComponent(branchName)}`;
+// Get repository hash from environment
+const repoHash = process.env.CLAUDE_HYDRA_REPO_HASH;
+if (!repoHash) {
+  process.exit(1);
+}
+
+// Construct the full URL with repoHash and branchName
+const url = `${baseUrl}/set-state/${encodeURIComponent(repoHash)}/${encodeURIComponent(branchName)}`;
 
 // Parse URL to determine protocol
 const urlObj = new URL(url);
