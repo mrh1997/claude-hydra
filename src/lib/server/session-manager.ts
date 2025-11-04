@@ -1649,7 +1649,16 @@ export class SessionManager {
 		try {
 			execSync('git fetch --all', {
 				cwd: this.repoRoot,
-				stdio: 'pipe'
+				stdio: 'ignore', // Ignore output to prevent pipe buffer deadlock
+				env: {
+					...process.env,
+					GIT_TERMINAL_PROMPT: '0', // Disable terminal credential prompts
+					GIT_ASKPASS: 'echo', // Disable GUI password prompts
+					SSH_ASKPASS: 'echo', // Disable SSH GUI prompts
+					DISPLAY: undefined, // Disable X11 prompts on Unix
+					GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=no' // Disable all SSH interactive prompts
+				},
+				timeout: 30000 // 30 second timeout
 			});
 
 			console.log(`Fetched updates for repository ${this.repoRoot}`);
@@ -1657,6 +1666,20 @@ export class SessionManager {
 		} catch (error: any) {
 			const errorMessage = error.message || String(error);
 			console.error(`Git fetch failed for repository ${this.repoRoot}:`, errorMessage);
+
+			// Check if it's an authentication error
+			if (
+				errorMessage.includes('terminal prompts disabled') ||
+				errorMessage.includes('Authentication failed') ||
+				errorMessage.includes('Permission denied') ||
+				errorMessage.includes('could not read Username')
+			) {
+				return {
+					success: false,
+					error: 'Authentication required. Please ensure git credentials are configured (SSH key or credential helper).'
+				};
+			}
+
 			return { success: false, error: errorMessage };
 		}
 	}

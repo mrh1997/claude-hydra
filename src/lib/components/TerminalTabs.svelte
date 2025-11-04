@@ -440,6 +440,11 @@
 		showRebaseConflictDialog = false;
 	}
 
+	function handleFetchError(event: CustomEvent<{ error: string }>) {
+		closeError = event.detail.error;
+		setTimeout(() => closeError = '', 5000);
+	}
+
 	function selectTab(id: string) {
 		terminals.setActiveTab(id);
 	}
@@ -529,6 +534,7 @@
 				onDiscardClick={handleDiscardClick}
 				onResetToBaseClick={handleResetToBaseClick}
 				on:closeRepository={handleCloseRepository}
+				on:fetchError={handleFetchError}
 			/>
 		{/each}
 	</div>

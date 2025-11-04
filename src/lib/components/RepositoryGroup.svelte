@@ -36,9 +36,16 @@
 		try {
 			// Import GitBackend dynamically to avoid circular dependencies
 			const { GitBackend } = await import('$lib/GitBackend');
-			await GitBackend.gitFetch(repoPath, websocketPort);
-		} catch (error) {
+			const result = await GitBackend.gitFetch(repoPath, websocketPort);
+
+			if (!result.success) {
+				const errorMsg = result.error || 'Git fetch failed';
+				dispatch('fetchError', { error: errorMsg });
+			}
+		} catch (error: any) {
 			console.error('Failed to fetch:', error);
+			const errorMsg = error.message || 'Git fetch failed';
+			dispatch('fetchError', { error: errorMsg });
 		} finally {
 			isFetching = false;
 		}
