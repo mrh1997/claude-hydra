@@ -42,8 +42,12 @@ function createTerminalsStore() {
 					// Deactivate all tabs when creating an active tab
 					tabs.forEach(tab => tab.active = false);
 				}
+				// Strip remote prefix for display title (e.g., "origin/feature-xyz" -> "feature-xyz")
+				const displayTitle = branchName.includes('/')
+					? branchName.split('/').slice(1).join('/')
+					: branchName;
 				// Add new tab (start as 'running' until backend detects prompt)
-				return [...tabs, { id, sessionId: null, title: branchName, branchName, repoPath, derivedFromBranch, active: activate, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
+				return [...tabs, { id, sessionId: null, title: displayTitle, branchName, repoPath, derivedFromBranch, active: activate, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
 			});
 		},
 		removeTab: (id: string, preserveWorktree: boolean = true) => {

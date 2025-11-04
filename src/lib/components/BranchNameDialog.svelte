@@ -124,13 +124,7 @@
 		const trimmedBranchName = branchName.trim();
 		const trimmedBaseBranch = baseBranchName.trim();
 
-		// Strip remote prefix from branch name (e.g., "origin/feature-foo" -> "feature-foo")
-		// This matches the backend behavior in session-manager.ts
-		const displayBranchName = trimmedBranchName.includes('/')
-			? trimmedBranchName.split('/').slice(1).join('/')
-			: trimmedBranchName;
-
-		if (!displayBranchName) {
+		if (!trimmedBranchName) {
 			errorMessage = 'Branch name cannot be empty';
 			return;
 		}
@@ -138,7 +132,9 @@
 			errorMessage = 'Base branch cannot be empty';
 			return;
 		}
-		dispatch('submit', { branchName: displayBranchName, baseBranchName: trimmedBaseBranch });
+		// Pass the full branch name (including remote prefix if present) to the backend
+		// The backend will handle remote branch detection and tracking
+		dispatch('submit', { branchName: trimmedBranchName, baseBranchName: trimmedBaseBranch });
 	}
 
 	function handleCancel() {
