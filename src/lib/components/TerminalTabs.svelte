@@ -192,8 +192,11 @@
 
 	function handleDialogSubmit(event: CustomEvent<{ branchName: string; baseBranchName: string }>) {
 		const { branchName, baseBranchName } = event.detail;
+		console.log('[TerminalTabs] handleDialogSubmit received:', { branchName, baseBranchName });
 		const id = uuidv4();
+		console.log('[TerminalTabs] Calling terminals.addTab with baseBranchName:', baseBranchName);
 		terminals.addTab(id, pendingRepoPath, branchName, false, !createTabInBackground, baseBranchName);
+		console.log('[TerminalTabs] Calling onNewTab for branch:', branchName);
 		onNewTab(id, pendingRepoPath, branchName);
 		showBranchDialog = false;
 		dialogError = '';

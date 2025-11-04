@@ -107,10 +107,12 @@ export class SessionManager {
 	 * @returns Session information including the worktree path to use as cwd
 	 */
 	async createSession(sessionId: string, branchName: string, adoptExisting: boolean = false, baseBranchName?: string): Promise<SessionInfo> {
+		console.log(`[SessionManager.createSession] Called with: sessionId=${sessionId}, branchName=${branchName}, adoptExisting=${adoptExisting}, baseBranchName=${baseBranchName}`);
 		const worktreePath = join(this.baseDir, branchName);
 
 		// Use provided baseBranchName or default to repository's base branch
 		const derivedFrom = baseBranchName || this.baseBranch;
+		console.log(`[SessionManager.createSession] derivedFrom=${derivedFrom}`);
 
 		// If adopting existing worktree
 		if (adoptExisting) {
@@ -206,15 +208,21 @@ export class SessionManager {
 					stdio: ['pipe', 'pipe', 'ignore']
 				});
 
-				// Try to read base branch from git config
+				// Priority: user-provided baseBranchName > stored git config > repo default
 				const storedBaseBranch = this.getBaseBranchForBranch(branchName);
-				if (storedBaseBranch) {
-					actualBaseBranch = storedBaseBranch;
-				} else if (baseBranchName) {
-					// Use provided base branch
+				console.log(`[SessionManager.createSession] Case 2 - Existing branch: storedBaseBranch=${storedBaseBranch}, providedBaseBranch=${baseBranchName}`);
+
+				if (baseBranchName) {
+					// User explicitly provided a base branch - use it and update git config
+					console.log(`[SessionManager.createSession] Using user-provided baseBranchName: ${baseBranchName}`);
 					actualBaseBranch = baseBranchName;
+				} else if (storedBaseBranch) {
+					// No user input, fall back to stored value
+					console.log(`[SessionManager.createSession] Using stored baseBranch: ${storedBaseBranch}`);
+					actualBaseBranch = storedBaseBranch;
 				}
 				// If neither stored nor provided, actualBaseBranch remains as derivedFrom (repo's default)
+				console.log(`[SessionManager.createSession] Final actualBaseBranch: ${actualBaseBranch}`);
 
 			// Case 3: New branch that doesn't exist yet
 			} else {

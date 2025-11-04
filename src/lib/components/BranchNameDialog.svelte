@@ -51,8 +51,10 @@
 
 	// Clear input and push/pop focus callback when dialog is shown/hidden
 	$: if (show && focusStack && inputElement && !isPushed) {
+		console.log('[BranchDialog] Dialog opened (with focusStack), resetting fields');
 		branchName = '';
 		baseBranchName = '';
+		console.log('[BranchDialog] baseBranchName reset to empty');
 		errorMessage = '';
 		showDropdown = false;
 		selectedIndex = -1;
@@ -66,6 +68,7 @@
 		isPushed = true;
 	} else if (!show && isPushed && focusStack && focusStack.depth > 1) {
 		// Pop when dialog closes
+		console.log('[BranchDialog] Dialog closed');
 		focusStack.pop();
 		isPushed = false;
 		showDropdown = false;
@@ -74,8 +77,10 @@
 
 	// Fallback autofocus when focusStack is not available
 	$: if (show && !focusStack && inputElement) {
+		console.log('[BranchDialog] Dialog opened (fallback), resetting fields');
 		branchName = '';
 		baseBranchName = '';
+		console.log('[BranchDialog] baseBranchName reset to empty (fallback)');
 		errorMessage = '';
 		showDropdown = false;
 		selectedIndex = -1;
@@ -89,9 +94,11 @@
 	}
 
 	function fetchBranches() {
+		console.log('[BranchDialog] fetchBranches() called');
 		const ws = new WebSocket(`ws://localhost:${websocketPort}`);
 
 		ws.onopen = () => {
+			console.log('[BranchDialog] WebSocket opened for listBranches');
 			ws.send(JSON.stringify({ type: 'listBranches', repoPath }));
 		};
 
@@ -99,7 +106,9 @@
 			const data = JSON.parse(event.data);
 			if (data.type === 'branchesListed') {
 				branches = data.branches || [];
+				console.log('[BranchDialog] Branches received:', branches.length, 'branches');
 				// Set default base branch with priority: origin/main > origin/master > main > master > first branch
+				console.log('[BranchDialog] Current baseBranchName before auto-set:', baseBranchName);
 				if (branches.length > 0 && !baseBranchName) {
 					baseBranchName =
 						branches.find(b => b === 'origin/main') ||
@@ -107,6 +116,9 @@
 						branches.find(b => b === 'main') ||
 						branches.find(b => b === 'master') ||
 						branches[0]; // Fallback to first branch if none of the above exist
+					console.log('[BranchDialog] Auto-set baseBranchName to:', baseBranchName);
+				} else {
+					console.log('[BranchDialog] Skipped auto-set (baseBranchName already has value:', baseBranchName, ')');
 				}
 			} else if (data.type === 'error') {
 				console.error('Failed to list branches:', data.error);
@@ -124,6 +136,10 @@
 		const trimmedBranchName = branchName.trim();
 		const trimmedBaseBranch = baseBranchName.trim();
 
+		console.log('[BranchDialog] handleSubmit() called');
+		console.log('[BranchDialog] branchName:', trimmedBranchName);
+		console.log('[BranchDialog] baseBranchName:', trimmedBaseBranch);
+
 		if (!trimmedBranchName) {
 			errorMessage = 'Branch name cannot be empty';
 			return;
@@ -134,6 +150,7 @@
 		}
 		// Pass the full branch name (including remote prefix if present) to the backend
 		// The backend will handle remote branch detection and tracking
+		console.log('[BranchDialog] Dispatching submit event with:', { branchName: trimmedBranchName, baseBranchName: trimmedBaseBranch });
 		dispatch('submit', { branchName: trimmedBranchName, baseBranchName: trimmedBaseBranch });
 	}
 
@@ -210,25 +227,31 @@
 	}
 
 	function fetchBaseBranchForBranch(branch: string) {
+		console.log('[BranchDialog] fetchBaseBranchForBranch() called for branch:', branch);
+		console.log('[BranchDialog] Current baseBranchName before fetch:', baseBranchName);
 		const ws = new WebSocket(`ws://localhost:${websocketPort}`);
 
 		ws.onopen = () => {
+			console.log('[BranchDialog] WebSocket opened for getBaseBranch, requesting for:', branch);
 			ws.send(JSON.stringify({ type: 'getBaseBranch', repoPath, branchName: branch }));
 		};
 
 		ws.onmessage = (event) => {
 			const data = JSON.parse(event.data);
+			console.log('[BranchDialog] WebSocket response received:', data);
 			if (data.type === 'baseBranch' && data.baseBranchName) {
 				// Auto-populate base branch field (but keep it editable)
+				console.log('[BranchDialog] Setting baseBranchName from', baseBranchName, 'to', data.baseBranchName);
 				baseBranchName = data.baseBranchName;
+				console.log('[BranchDialog] baseBranchName is now:', baseBranchName);
 			} else if (data.type === 'error') {
-				console.error('Failed to fetch base branch:', data.error);
+				console.error('[BranchDialog] Failed to fetch base branch:', data.error);
 			}
 			ws.close();
 		};
 
 		ws.onerror = () => {
-			console.error('WebSocket error while fetching base branch');
+			console.error('[BranchDialog] WebSocket error while fetching base branch');
 			ws.close();
 		};
 	}
@@ -237,7 +260,9 @@
 		if (event.key === 'Enter') {
 			if (showDropdown && selectedIndex >= 0 && selectedIndex < filteredBranchesForBase.length) {
 				// Select the highlighted item
+				console.log('[BranchDialog] User selected base branch from dropdown (Enter key):', filteredBranchesForBase[selectedIndex]);
 				baseBranchName = filteredBranchesForBase[selectedIndex];
+				console.log('[BranchDialog] baseBranchName is now:', baseBranchName);
 				showDropdown = false;
 				selectedIndex = -1;
 			}
@@ -282,7 +307,9 @@
 	}
 
 	function handleDropdownItemClick(branch: string) {
+		console.log('[BranchDialog] User clicked base branch from dropdown:', branch);
 		baseBranchName = branch;
+		console.log('[BranchDialog] baseBranchName is now:', baseBranchName);
 		showDropdown = false;
 		selectedIndex = -1;
 	}

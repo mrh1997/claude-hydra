@@ -37,6 +37,7 @@ function createTerminalsStore() {
 	return {
 		subscribe,
 		addTab: (id: string, repoPath: string, branchName: string, adoptExisting: boolean = false, activate: boolean = true, derivedFromBranch?: string) => {
+			console.log('[terminals.addTab] Called with:', { id, repoPath, branchName, adoptExisting, activate, derivedFromBranch });
 			update(tabs => {
 				if (activate) {
 					// Deactivate all tabs when creating an active tab
@@ -47,6 +48,7 @@ function createTerminalsStore() {
 					? branchName.split('/').slice(1).join('/')
 					: branchName;
 				// Add new tab (start as 'running' until backend detects prompt)
+				console.log('[terminals.addTab] Creating new tab with derivedFromBranch:', derivedFromBranch);
 				return [...tabs, { id, sessionId: null, title: displayTitle, branchName, repoPath, derivedFromBranch, active: activate, state: 'running', adoptExisting, gitStatus: null, commitLog: null, focusStack: null }];
 			});
 		},
@@ -102,10 +104,14 @@ function createTerminalsStore() {
 			});
 		},
 	updateDerivedFromBranch: (id: string, derivedFromBranch: string) => {
+		console.log('[terminals.updateDerivedFromBranch] Updating tab', id, 'with derivedFromBranch:', derivedFromBranch);
 		update(tabs => {
 			const tab = tabs.find(tab => tab.id === id);
 			if (tab) {
+				console.log('[terminals.updateDerivedFromBranch] Tab found, old value:', tab.derivedFromBranch, 'new value:', derivedFromBranch);
 				tab.derivedFromBranch = derivedFromBranch;
+			} else {
+				console.warn('[terminals.updateDerivedFromBranch] Tab not found:', id);
 			}
 			return tabs;
 		});
