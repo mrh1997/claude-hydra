@@ -196,3 +196,13 @@ export function sendWaituserRequest(repoHash: string, branchName: string, text: 
 	}
 	return false;
 }
+
+export function sendOpenUrlRequest(repoHash: string, branchName: string, url: string, instructions: string, hidden: boolean): boolean {
+	const key = makeConnectionKey(repoHash, branchName);
+	const ws = branchConnections.get(key);
+	if (ws && ws.readyState === ws.OPEN) {
+		ws.send(JSON.stringify({ type: 'openurl', url, instructions, hidden }));
+		return true;
+	}
+	return false;
+}

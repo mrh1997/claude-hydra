@@ -1,21 +1,26 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { sendStateUpdate, sendReadyStateWithGitStatus, sendCloseTabRequest, sendDiscardAndCloseRequest, sendKeepBranchAndCloseRequest, sendWaituserRequest } from '$lib/server/websocket-manager';
+import { sendStateUpdate, sendReadyStateWithGitStatus, sendCloseTabRequest, sendDiscardAndCloseRequest, sendKeepBranchAndCloseRequest, sendWaituserRequest, sendOpenUrlRequest } from '$lib/server/websocket-manager';
 import { getRepositoryRegistry } from '$lib/server/session-manager-instance';
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { repohash, branchname } = params;
 	const body = await request.json();
-	const { state, text, commandline, mode } = body;
+	const { state, text, commandline, mode, url, instructions, hidden } = body;
 
 	// Validate state
-	if (state !== 'ready' && state !== 'running' && state !== 'close' && state !== 'waituser') {
+	if (state !== 'ready' && state !== 'running' && state !== 'close' && state !== 'waituser' && state !== 'openurl') {
 		return json({ error: 'Invalid state' }, { status: 400 });
 	}
 
 	// Validate waituser parameters
 	if (state === 'waituser' && !commandline) {
 		return json({ error: 'waituser state requires commandline parameter' }, { status: 400 });
+	}
+
+	// Validate openurl parameters
+	if (state === 'openurl' && (!url || !instructions)) {
+		return json({ error: 'openurl state requires url and instructions parameters' }, { status: 400 });
 	}
 
 	// Send state update to the WebSocket connection for this repository+branch combination
@@ -78,6 +83,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	} else if (state === 'waituser') {
 		// For 'waituser' state, send waituser request with text and commandline
 		sent = sendWaituserRequest(repohash, branchname, text || commandline, commandline);
+	} else if (state === 'openurl') {
+		// For 'openurl' state, send openurl request with url, instructions, and hidden flag
+		sent = sendOpenUrlRequest(repohash, branchname, url, instructions, hidden || false);
 	} else {
 		// For 'running' state, just send state update
 		sent = sendStateUpdate(repohash, branchname, state);

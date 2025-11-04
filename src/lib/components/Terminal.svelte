@@ -62,6 +62,13 @@
 	let autoInitErrorMessage = '';
 	let showAutoInitError = false;
 
+	// Iframe state
+	let iframeUrl = '';
+	let iframeInstructions = '';
+	let showIframe = false;
+	let iframeHidden = false;
+	let hasIframe = false; // Whether an iframe is loaded (even if hidden)
+
 	onMount(async () => {
 		// Initialize focus stack and register with store
 		focusStack = new FocusStack();
@@ -341,6 +348,16 @@
 						waituserText = message.text;
 						waituserCommandline = message.commandline;
 						showWaituserBox = true;
+						break;
+
+					case 'openurl':
+						// Load URL in iframe with instructions
+						iframeUrl = message.url;
+						iframeInstructions = message.instructions;
+						iframeHidden = message.hidden || false;
+						hasIframe = true;
+						// Show iframe immediately unless hidden flag is set
+						showIframe = !message.hidden;
 						break;
 
 					case 'waituserError':
@@ -800,6 +817,27 @@
 		waituserText = '';
 		waituserCommandline = '';
 	}
+
+	/**
+	 * Handle F10 key press or blue bar click - toggle iframe view
+	 */
+	export function handleIframeToggle() {
+		if (!hasIframe) {
+			return;
+		}
+		showIframe = !showIframe;
+	}
+
+	/**
+	 * Handle close button click - completely remove iframe and blue bar
+	 */
+	function handleIframeClose() {
+		showIframe = false;
+		hasIframe = false;
+		iframeUrl = '';
+		iframeInstructions = '';
+		iframeHidden = false;
+	}
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
@@ -819,7 +857,7 @@
 				<div class="autoinit-error-content">{autoInitErrorMessage}</div>
 			</div>
 		{/if}
-		<div bind:this={terminalElement} class="terminal" class:hidden={showDiffViewer}></div>
+		<div bind:this={terminalElement} class="terminal" class:hidden={showDiffViewer || showIframe}></div>
 		<DiffViewer
 			bind:this={diffViewerComponent}
 			originalContent={diffOriginalContent}
@@ -845,6 +883,27 @@
 	</div>
 	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
 	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} selectedPath={showDiffViewer ? diffFileName : null} />
+	{#if hasIframe}
+		<iframe
+			src={iframeUrl}
+			class="iframe-viewer"
+			class:hidden={!showIframe}
+			title={iframeInstructions}
+			allow="fullscreen"
+		></iframe>
+	{/if}
+	{#if hasIframe}
+		<div class="iframe-bar" on:click={handleIframeToggle} role="button" tabindex="0" title={iframeUrl}>
+			<div class="iframe-instructions">{iframeInstructions}</div>
+			<div class="iframe-controls">
+				<svg class="swap-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M21,9L17,5V8H10V10H17V13M7,11L3,15L7,19V16H14V14H7V11Z" />
+				</svg>
+				<span class="shortcut-hint">F10</span>
+				<button class="iframe-close-btn" on:click|stopPropagation={handleIframeClose} aria-label="Close">×</button>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <WaituserErrorDialog
@@ -1002,5 +1061,99 @@
 		word-wrap: break-word;
 		flex: 1;
 		min-height: 0;
+	}
+
+	.iframe-viewer {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 44px; /* Leave space for the blue bar */
+		width: 100%;
+		height: calc(100% - 44px);
+		border: 3px solid #2196F3;
+		border-bottom: none;
+		background-color: #ffffff;
+		z-index: 50;
+	}
+
+	.iframe-viewer.hidden {
+		display: none;
+	}
+
+	.iframe-bar {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: 44px;
+		background-color: #2196F3;
+		color: #ffffff;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 16px;
+		box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+		z-index: 100;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.iframe-bar:hover {
+		background-color: #1976D2;
+	}
+
+	.iframe-bar:active {
+		background-color: #1565C0;
+	}
+
+	.iframe-instructions {
+		font-size: 14px;
+		font-weight: 500;
+		flex: 1;
+	}
+
+	.iframe-controls {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.swap-icon {
+		opacity: 0.9;
+	}
+
+	.shortcut-hint {
+		font-size: 11px;
+		font-weight: 600;
+		padding: 2px 6px;
+		background-color: rgba(255, 255, 255, 0.2);
+		border-radius: 3px;
+	}
+
+	.iframe-close-btn {
+		background: none;
+		border: none;
+		color: #ffffff;
+		font-size: 28px;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0;
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		transition: background-color 0.2s;
+		margin-left: 4px;
+	}
+
+	.iframe-close-btn:hover {
+		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.iframe-close-btn:active {
+		background-color: rgba(255, 255, 255, 0.3);
 	}
 </style>

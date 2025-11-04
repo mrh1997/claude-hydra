@@ -87,6 +87,13 @@ export const SHORTCUTS = {
 		shiftKey: false,
 		description: 'Execute waituser command (F9)'
 	} as KeyboardShortcut,
+	TOGGLE_IFRAME: {
+		key: 'F10',
+		altKey: false,
+		ctrlKey: false,
+		shiftKey: false,
+		description: 'Toggle iframe view (F10)'
+	} as KeyboardShortcut,
 	FETCH: {
 		key: 's',
 		altKey: true,
@@ -124,6 +131,7 @@ export function shouldBlockFromTerminal(event: KeyboardEvent): boolean {
 		matchesShortcut(event, SHORTCUTS.PREV_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.RETURN_TO_DIFF) ||
 		matchesShortcut(event, SHORTCUTS.EXECUTE_WAITUSER) ||
+		matchesShortcut(event, SHORTCUTS.TOGGLE_IFRAME) ||
 		matchesShortcut(event, SHORTCUTS.FETCH)
 	);
 }

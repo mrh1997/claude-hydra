@@ -336,6 +336,19 @@
 				}
 				return;
 			}
+
+			// F10: Toggle iframe view
+			if (matchesShortcut(event, SHORTCUTS.TOGGLE_IFRAME)) {
+				event.preventDefault();
+				const activeTab = $terminals.find(t => t.active);
+				if (activeTab) {
+					const terminalComponent = terminalComponents[activeTab.id];
+					if (terminalComponent && terminalComponent.handleIframeToggle) {
+						terminalComponent.handleIframeToggle();
+					}
+				}
+				return;
+			}
 		};
 
 		// Handle window/tab close

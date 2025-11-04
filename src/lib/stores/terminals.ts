@@ -29,6 +29,10 @@ export interface TerminalTab {
 	commitLog: CommitInfo[] | null;
 	focusStack: FocusStack | null;
 	preserveWorktreeOnDestroy?: boolean; // Whether to preserve worktree when tab is destroyed
+	iframeUrl?: string; // URL to display in iframe
+	iframeInstructions?: string; // Instructions text to show in blue bar
+	showIframe?: boolean; // Whether to show the iframe (false = hidden, only bar visible)
+	iframeHidden?: boolean; // Whether iframe was loaded with hidden flag
 }
 
 function createTerminalsStore() {
