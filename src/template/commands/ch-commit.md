@@ -14,9 +14,5 @@ Please perform the following steps:
 
    Co-Authored-By: Claude <noreply@anthropic.com>
    ```
-5. Check if the base branch is a remote branch:
-   - Get the base branch from the environment variable `CLAUDE_HYDRA_BASE_BRANCH`
-   - If `$CLAUDE_HYDRA_BASE_BRANCH` contains a "/" character (e.g., "origin/main"), it's a remote branch
-   - If it's a remote branch, perform a force push: `git push --force-with-lease`
 
 Execute these steps now without asking for confirmation.
