@@ -1647,7 +1647,7 @@ export class SessionManager {
 	 */
 	gitFetch(): { success: boolean; error?: string } {
 		try {
-			execSync('git fetch --all', {
+			execSync('git fetch --all --prune', {
 				cwd: this.repoRoot,
 				stdio: 'ignore', // Ignore output to prevent pipe buffer deadlock
 				env: {
