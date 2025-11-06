@@ -68,6 +68,7 @@
 	let showIframe = false;
 	let iframeHidden = false;
 	let hasIframe = false; // Whether an iframe is loaded (even if hidden)
+	let iframeElement: HTMLIFrameElement;
 
 	onMount(async () => {
 		// Initialize focus stack and register with store
@@ -358,6 +359,10 @@
 						hasIframe = true;
 						// Show iframe immediately unless hidden flag is set
 						showIframe = !message.hidden;
+						// Force iframe reload
+						if (iframeElement) {
+							iframeElement.src = iframeElement.src;
+						}
 						break;
 
 					case 'waituserError':
@@ -838,6 +843,29 @@
 		iframeInstructions = '';
 		iframeHidden = false;
 	}
+
+	/**
+	 * Handle reload button click - force reload the iframe
+	 */
+	function handleIframeReload(event: Event) {
+		event.stopPropagation(); // Prevent triggering iframe toggle
+		if (iframeElement) {
+			iframeElement.src = iframeElement.src;
+		}
+	}
+
+	/**
+	 * Handle open in new tab button click - hide iframe and open URL externally
+	 */
+	function handleIframeOpenExternal(event: Event) {
+		event.stopPropagation(); // Prevent triggering iframe toggle
+		// Hide iframe if visible (but don't toggle if already hidden)
+		if (showIframe) {
+			showIframe = false;
+		}
+		// Open URL in new browser tab
+		window.open(iframeUrl, '_blank');
+	}
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
@@ -885,6 +913,7 @@
 	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} selectedPath={showDiffViewer ? diffFileName : null} />
 	{#if hasIframe}
 		<iframe
+			bind:this={iframeElement}
 			src={iframeUrl}
 			class="iframe-viewer"
 			class:hidden={!showIframe}
@@ -894,7 +923,19 @@
 	{/if}
 	{#if hasIframe}
 		<div class="iframe-bar" on:click={handleIframeToggle} role="button" tabindex="0" title={iframeUrl}>
-			<div class="iframe-instructions">{iframeInstructions}</div>
+			<div class="iframe-instructions">
+				{iframeInstructions}
+				<button class="iframe-open-external-btn" on:click={handleIframeOpenExternal} aria-label="Open in new tab" title="Open in new tab">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
+					</svg>
+				</button>
+				<button class="iframe-reload-btn" on:click={handleIframeReload} aria-label="Reload" title="Reload">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z" />
+					</svg>
+				</button>
+			</div>
 			<div class="iframe-controls">
 				<svg class="swap-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
 					<path d="M21,9L17,5V8H10V10H17V13M7,11L3,15L7,19V16H14V14H7V11Z" />
@@ -1111,6 +1152,57 @@
 		font-size: 14px;
 		font-weight: 500;
 		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.iframe-open-external-btn {
+		background: none;
+		border: none;
+		color: #ffffff;
+		cursor: pointer;
+		padding: 4px;
+		width: 24px;
+		height: 24px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		transition: background-color 0.2s;
+		flex-shrink: 0;
+	}
+
+	.iframe-open-external-btn:hover {
+		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.iframe-open-external-btn:active {
+		background-color: rgba(255, 255, 255, 0.3);
+	}
+
+	.iframe-reload-btn {
+		background: none;
+		border: none;
+		color: #ffffff;
+		cursor: pointer;
+		padding: 4px;
+		width: 24px;
+		height: 24px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		transition: background-color 0.2s;
+		flex-shrink: 0;
+	}
+
+	.iframe-reload-btn:hover {
+		background-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.iframe-reload-btn:active {
+		background-color: rgba(255, 255, 255, 0.3);
 	}
 
 	.iframe-controls {
