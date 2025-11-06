@@ -33,6 +33,7 @@ if (state === 'openurl') {
   if (!url || !instructions) {
     process.exit(1);
   }
+  // Note: File path to URL conversion is now handled server-side in the set-state endpoint
 }
 
 // Get git branch name

@@ -4,6 +4,7 @@ import { PtyManager } from '$lib/server/pty-manager';
 import { RepositoryRegistry } from '$lib/server/repository-registry';
 import { registerConnection, unregisterConnection, sendGitBranchStatus, broadcastGitStatusToAll } from '$lib/server/websocket-manager';
 import { setRepositoryRegistry } from '$lib/server/session-manager-instance';
+import { initializeFileServerSecret } from '$lib/server/secret-instance';
 import { promises as fs } from 'fs';
 import { execSync } from 'child_process';
 
@@ -41,6 +42,9 @@ const isHeadless = process.env.IS_HEADLESS === 'true';
 repositoryRegistry = new RepositoryRegistry();
 setRepositoryRegistry(repositoryRegistry); // Register the singleton instance
 ptyManager = new PtyManager(repositoryRegistry);
+
+// Initialize file server secret (generates once on startup)
+initializeFileServerSecret();
 
 // Export repositoryRegistry for use in other modules (e.g., +page.server.ts)
 export { repositoryRegistry };
