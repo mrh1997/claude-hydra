@@ -23,6 +23,8 @@
 	let selectedIndex = -1; // For base branch dropdown
 	let showBranchDropdown = false; // For branch name dropdown
 	let selectedBranchIndex = -1; // For branch name dropdown
+	let branchInputFocused = false; // Track focus state of branch name input
+	let baseBranchInputFocused = false; // Track focus state of base branch input
 	const dispatch = createEventDispatcher();
 
 	// Get list of branch names that are already opened as terminals
@@ -38,6 +40,18 @@
 	$: filteredBranchesForBase = branches.filter(b =>
 		baseBranchName === '' || b.toLowerCase().includes(baseBranchName.toLowerCase())
 	);
+
+	// Auto-open dropdown when input is focused and filtered results become available
+	$: if (branchInputFocused && filteredBranchesForInput.length > 0 && !showBranchDropdown) {
+		showBranchDropdown = true;
+		selectedBranchIndex = -1;
+	}
+
+	// Auto-open base branch dropdown when input is focused and filtered results become available
+	$: if (baseBranchInputFocused && filteredBranchesForBase.length > 0 && !showDropdown) {
+		showDropdown = true;
+		selectedIndex = -1;
+	}
 
 	// Fetch branches when dialog is shown
 	$: if (show && repoPath) {
@@ -203,6 +217,7 @@
 	}
 
 	function handleBranchNameFocus() {
+		branchInputFocused = true;
 		inputElement.select();
 		if (filteredBranchesForInput.length > 0) {
 			showBranchDropdown = true;
@@ -211,6 +226,7 @@
 	}
 
 	function handleBranchNameBlur() {
+		branchInputFocused = false;
 		// Delay hiding dropdown to allow click on dropdown item
 		setTimeout(() => {
 			showBranchDropdown = false;
@@ -291,6 +307,7 @@
 	}
 
 	function handleBaseBranchFocus() {
+		baseBranchInputFocused = true;
 		baseBranchInputElement.select();
 		if (filteredBranchesForBase.length > 0) {
 			showDropdown = true;
@@ -299,6 +316,7 @@
 	}
 
 	function handleBaseBranchBlur() {
+		baseBranchInputFocused = false;
 		// Delay hiding dropdown to allow click on dropdown item
 		setTimeout(() => {
 			showDropdown = false;
