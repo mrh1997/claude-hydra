@@ -30,6 +30,16 @@
 	// Get list of branch names that are already opened as terminals
 	$: openedBranches = $terminals.map(t => t.branchName);
 
+	// Get set of local branch names for checking if remote branches have local counterparts
+	$: localBranches = new Set(branches.filter(b => !b.includes('/')));
+
+	// Check if a branch should be disabled (remote branch with local counterpart)
+	function isBranchDisabled(branch: string): boolean {
+		if (!branch.includes('/')) return false; // Local branches are never disabled
+		const remoteBranchName = branch.split('/').slice(1).join('/');
+		return localBranches.has(remoteBranchName);
+	}
+
 	// Filter branches for the branch name dropdown
 	// Exclude branches that are already opened and filter by current input
 	$: filteredBranchesForInput = branches
@@ -162,6 +172,20 @@
 			errorMessage = 'Base branch cannot be empty';
 			return;
 		}
+
+		// Prevent manual entry of remote branches that have local counterparts
+		if (isBranchDisabled(trimmedBranchName)) {
+			const remoteBranchName = trimmedBranchName.split('/').slice(1).join('/');
+			errorMessage = `Cannot create terminal for remote branch "${trimmedBranchName}" because local branch "${remoteBranchName}" already exists. Please use "${remoteBranchName}" instead.`;
+			return;
+		}
+
+		// Prevent manual entry of non-existent remote branches
+		if (trimmedBranchName.includes('/') && !branches.includes(trimmedBranchName)) {
+			errorMessage = `Remote branch "${trimmedBranchName}" does not exist in this repository.`;
+			return;
+		}
+
 		// Pass the full branch name (including remote prefix if present) to the backend
 		// The backend will handle remote branch detection and tracking
 		console.log('[BranchDialog] Dispatching submit event with:', { branchName: trimmedBranchName, baseBranchName: trimmedBaseBranch });
@@ -204,14 +228,33 @@
 			event.preventDefault();
 			if (!showBranchDropdown && filteredBranchesForInput.length > 0) {
 				showBranchDropdown = true;
-				selectedBranchIndex = 0;
+				// Find first non-disabled item
+				let nextIndex = 0;
+				while (nextIndex < filteredBranchesForInput.length && isBranchDisabled(filteredBranchesForInput[nextIndex])) {
+					nextIndex++;
+				}
+				selectedBranchIndex = nextIndex < filteredBranchesForInput.length ? nextIndex : -1;
 			} else if (selectedBranchIndex < filteredBranchesForInput.length - 1) {
-				selectedBranchIndex++;
+				// Find next non-disabled item
+				let nextIndex = selectedBranchIndex + 1;
+				while (nextIndex < filteredBranchesForInput.length && isBranchDisabled(filteredBranchesForInput[nextIndex])) {
+					nextIndex++;
+				}
+				if (nextIndex < filteredBranchesForInput.length) {
+					selectedBranchIndex = nextIndex;
+				}
 			}
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
 			if (selectedBranchIndex > 0) {
-				selectedBranchIndex--;
+				// Find previous non-disabled item
+				let prevIndex = selectedBranchIndex - 1;
+				while (prevIndex >= 0 && isBranchDisabled(filteredBranchesForInput[prevIndex])) {
+					prevIndex--;
+				}
+				if (prevIndex >= 0) {
+					selectedBranchIndex = prevIndex;
+				}
 			}
 		}
 	}
@@ -383,13 +426,16 @@
 					{#if showBranchDropdown && filteredBranchesForInput.length > 0}
 						<div class="dropdown" bind:this={branchDropdownElement}>
 							{#each filteredBranchesForInput as branch, index}
+								{@const disabled = isBranchDisabled(branch)}
 								<div
 									class="dropdown-item"
-									class:selected={index === selectedBranchIndex}
-									on:mousedown={() => handleBranchDropdownItemClick(branch)}
-									on:mouseenter={() => selectedBranchIndex = index}
+									class:selected={index === selectedBranchIndex && !disabled}
+									class:disabled={disabled}
+									on:mousedown={() => !disabled && handleBranchDropdownItemClick(branch)}
+									on:mouseenter={() => !disabled && (selectedBranchIndex = index)}
 									role="option"
 									aria-selected={index === selectedBranchIndex}
+									aria-disabled={disabled}
 								>
 									{branch}
 								</div>
@@ -540,6 +586,16 @@
 	.dropdown-item.selected {
 		background-color: #094771;
 		color: #ffffff;
+	}
+
+	.dropdown-item.disabled {
+		color: #666666;
+		cursor: not-allowed;
+	}
+
+	.dropdown-item.disabled:hover {
+		background-color: transparent;
+		color: #666666;
 	}
 
 	.error {
