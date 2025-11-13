@@ -194,8 +194,8 @@ export class SessionManager {
 					stdio: ['pipe', 'pipe', 'ignore']
 				});
 
-				// Use the remote branch as the base branch
-				actualBaseBranch = branchName;
+				// Use the remote branch as the base branch (or user-specified base)
+				actualBaseBranch = baseBranchName || branchName;
 
 			// Case 2: Local branch that already exists
 			} else if (branchAlreadyExists) {
