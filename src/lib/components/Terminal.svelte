@@ -44,6 +44,8 @@
 	let blurTimeout: number | null = null; // Timeout for auto-focus restoration
 	let forceNextDiffUpdate = false; // Force next diff update (used after discard)
 	let preserveWorktree = true; // Whether to preserve worktree on destroy (default: true)
+	let keepBranch = false; // Whether to keep branch but delete worktree on destroy (default: false)
+	let discardBeforeDestroy = false; // Whether to discard changes and reset to base before destroying (default: false)
 
 	// File navigation state for F8/Shift+F8
 	let modifiedFilesList: string[] = []; // List of modified files
@@ -425,10 +427,17 @@
 		}
 		if (ws) {
 			if (sessionId) {
+				// If discard flag is set, send discard and reset messages first
+				if (discardBeforeDestroy) {
+					console.log(`[Terminal.onDestroy] Discarding changes and resetting to base for sessionId=${sessionId}`);
+					ws.send(JSON.stringify({ type: 'discardChanges' }));
+					ws.send(JSON.stringify({ type: 'resetToBase' }));
+				}
+
 				// Preserve worktree by default - this allows tabs to be restored when repository is reopened
 				// Only destroy worktrees when explicitly requested (e.g., user closes individual tab)
-				console.log(`[Terminal.onDestroy] Sending destroy message with preserveWorktree=${preserveWorktree} for sessionId=${sessionId}`);
-				ws.send(JSON.stringify({ type: 'destroy', preserveWorktree }));
+				console.log(`[Terminal.onDestroy] Sending destroy message with preserveWorktree=${preserveWorktree}, keepBranch=${keepBranch} for sessionId=${sessionId}`);
+				ws.send(JSON.stringify({ type: 'destroy', preserveWorktree, keepBranch }));
 				// Unregister GitBackend
 				gitBackends.unregister(sessionId);
 			}
@@ -456,6 +465,14 @@
 	// Update preserveWorktree flag when tab's preserveWorktreeOnDestroy changes
 	$: if (tab?.preserveWorktreeOnDestroy !== undefined) {
 		preserveWorktree = tab.preserveWorktreeOnDestroy;
+	}
+	// Update keepBranch flag when tab's keepBranchOnDestroy changes
+	$: if (tab?.keepBranchOnDestroy !== undefined) {
+		keepBranch = tab.keepBranchOnDestroy;
+	}
+	// Update discardBeforeDestroy flag when tab's discardOnDestroy changes
+	$: if (tab?.discardOnDestroy !== undefined) {
+		discardBeforeDestroy = tab.discardOnDestroy;
 	}
 
 	/**

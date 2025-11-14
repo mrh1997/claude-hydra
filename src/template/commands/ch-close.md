@@ -9,3 +9,5 @@ Examples:
 - `/ch-close` - Shows dialog if there are changes
 - `/ch-close discard` - Immediately discard everything and close
 - `/ch-close keep-branch` - Keep branch with WIP commit, delete worktree and close
+
+Please call `.claude/hooks/update-state.js close` with the provided argument (if any).

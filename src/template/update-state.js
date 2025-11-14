@@ -10,6 +10,16 @@ if (!state || !['ready', 'running', 'close', 'waituser', 'openurl'].includes(sta
   process.exit(1);
 }
 
+// For close state, get optional mode parameter
+let mode;
+if (state === 'close') {
+  mode = process.argv[3]; // Optional parameter: 'discard' or 'keep-branch'
+  // Validate mode if provided
+  if (mode && !['discard', 'keep-branch'].includes(mode)) {
+    process.exit(1);
+  }
+}
+
 // For waituser state, get additional parameters
 let text, commandline;
 if (state === 'waituser') {
@@ -87,6 +97,9 @@ req.socket?.unref();
 
 // Build request body based on state
 const requestBody = { state };
+if (state === 'close' && mode) {
+  requestBody.mode = mode;
+}
 if (state === 'waituser') {
   requestBody.text = text;
   requestBody.commandline = commandline;

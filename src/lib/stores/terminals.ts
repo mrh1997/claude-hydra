@@ -29,6 +29,8 @@ export interface TerminalTab {
 	commitLog: CommitInfo[] | null;
 	focusStack: FocusStack | null;
 	preserveWorktreeOnDestroy?: boolean; // Whether to preserve worktree when tab is destroyed
+	keepBranchOnDestroy?: boolean; // Whether to keep branch but delete worktree when tab is destroyed
+	discardOnDestroy?: boolean; // Whether to discard changes and reset to base before destroying
 	iframeUrl?: string; // URL to display in iframe
 	iframeInstructions?: string; // Instructions text to show in blue bar
 	showIframe?: boolean; // Whether to show the iframe (false = hidden, only bar visible)
@@ -40,6 +42,7 @@ function createTerminalsStore() {
 
 	return {
 		subscribe,
+		update,
 		addTab: (id: string, repoPath: string, branchName: string, adoptExisting: boolean = false, activate: boolean = true, derivedFromBranch?: string) => {
 			console.log('[terminals.addTab] Called with:', { id, repoPath, branchName, adoptExisting, activate, derivedFromBranch });
 			update(tabs => {
