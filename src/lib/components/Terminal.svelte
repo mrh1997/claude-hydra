@@ -886,58 +886,60 @@
 </script>
 
 <div class="terminal-container" class:hidden={!active}>
-	<div class="terminal-area" style="width: calc(100% - {commitListWidth + 4}px)">
-		{#if showAutoInitStatus}
-			<div class="autoinit-status-bar">
-				<div class="autoinit-spinner"></div>
-				<span>Autoinitializing Working Tree...</span>
-			</div>
-		{/if}
-		{#if showAutoInitError}
-			<div class="autoinit-error-window">
-				<div class="autoinit-error-header">
-					<span class="autoinit-error-title">Autoinit Error</span>
-					<button class="autoinit-error-close" on:click={handleCloseAutoInitError}>×</button>
+	<div class="terminal-main-content">
+		<div class="terminal-area" style="width: calc(100% - {commitListWidth + 4}px)">
+			{#if showAutoInitStatus}
+				<div class="autoinit-status-bar">
+					<div class="autoinit-spinner"></div>
+					<span>Autoinitializing Working Tree...</span>
 				</div>
-				<div class="autoinit-error-content">{autoInitErrorMessage}</div>
-			</div>
-		{/if}
-		<div bind:this={terminalElement} class="terminal" class:hidden={showDiffViewer || showIframe}></div>
-		<DiffViewer
-			bind:this={diffViewerComponent}
-			originalContent={diffOriginalContent}
-			modifiedContent={diffModifiedContent}
-			fileName={diffFileName}
-			language={diffLanguage}
-			active={showDiffViewer && active}
-			commitId={diffCommitId}
-			{focusStack}
-			bind:forceUpdate={forceNextDiffUpdate}
-			on:close={handleCloseDiff}
-			on:save={handleSaveFile}
-			on:discard={handleDiscardFile}
-			on:nextDiff={handleNextDiff}
-			on:prevDiff={handlePrevDiff}
-		/>
-		{#if showWaituserBox}
-			<div class="waituser-box">
-				<div class="waituser-text">{waituserText}</div>
-				<div class="waituser-hint">Press F9 to start</div>
-			</div>
+			{/if}
+			{#if showAutoInitError}
+				<div class="autoinit-error-window">
+					<div class="autoinit-error-header">
+						<span class="autoinit-error-title">Autoinit Error</span>
+						<button class="autoinit-error-close" on:click={handleCloseAutoInitError}>×</button>
+					</div>
+					<div class="autoinit-error-content">{autoInitErrorMessage}</div>
+				</div>
+			{/if}
+			<div bind:this={terminalElement} class="terminal" class:hidden={showDiffViewer || showIframe}></div>
+			<DiffViewer
+				bind:this={diffViewerComponent}
+				originalContent={diffOriginalContent}
+				modifiedContent={diffModifiedContent}
+				fileName={diffFileName}
+				language={diffLanguage}
+				active={showDiffViewer && active}
+				commitId={diffCommitId}
+				{focusStack}
+				bind:forceUpdate={forceNextDiffUpdate}
+				on:close={handleCloseDiff}
+				on:save={handleSaveFile}
+				on:discard={handleDiscardFile}
+				on:nextDiff={handleNextDiff}
+				on:prevDiff={handlePrevDiff}
+			/>
+			{#if showWaituserBox}
+				<div class="waituser-box">
+					<div class="waituser-text">{waituserText}</div>
+					<div class="waituser-hint">Press F9 to start</div>
+				</div>
+			{/if}
+		</div>
+		<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
+		<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} selectedPath={showDiffViewer ? diffFileName : null} />
+		{#if hasIframe}
+			<iframe
+				bind:this={iframeElement}
+				src={iframeUrl}
+				class="iframe-viewer"
+				class:hidden={!showIframe}
+				title={iframeInstructions}
+				allow="fullscreen"
+			></iframe>
 		{/if}
 	</div>
-	<Splitter currentWidth={commitListWidth} on:resize={handleSplitterResize} />
-	<CommitList commits={commitLog} {active} {files} onCommitSelect={handleCommitSelect} on:fileClick={handleFileClick} width={commitListWidth} {gitBackend} {focusStack} selectedPath={showDiffViewer ? diffFileName : null} />
-	{#if hasIframe}
-		<iframe
-			bind:this={iframeElement}
-			src={iframeUrl}
-			class="iframe-viewer"
-			class:hidden={!showIframe}
-			title={iframeInstructions}
-			allow="fullscreen"
-		></iframe>
-	{/if}
 	{#if hasIframe}
 		<div class="iframe-bar" on:click={handleIframeToggle} role="button" tabindex="0" title={iframeUrl}>
 			<div class="iframe-instructions">
@@ -979,12 +981,20 @@
 		width: 100%;
 		height: 100%;
 		display: flex;
-		flex-direction: row;
+		flex-direction: column;
 	}
 
 	.terminal-container.hidden {
 		visibility: hidden;
 		pointer-events: none;
+	}
+
+	.terminal-main-content {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		overflow: hidden;
+		position: relative;
 	}
 
 	.terminal-area {
@@ -1126,13 +1136,14 @@
 		top: 0;
 		left: 0;
 		right: 0;
-		bottom: 44px; /* Leave space for the blue bar */
+		bottom: 0;
 		width: 100%;
-		height: calc(100% - 44px);
+		height: 100%;
 		border: 3px solid #2196F3;
 		border-bottom: none;
 		background-color: #ffffff;
 		z-index: 50;
+		pointer-events: auto;
 	}
 
 	.iframe-viewer.hidden {
@@ -1140,10 +1151,6 @@
 	}
 
 	.iframe-bar {
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
 		height: 44px;
 		background-color: #2196F3;
 		color: #ffffff;
@@ -1155,6 +1162,7 @@
 		z-index: 100;
 		cursor: pointer;
 		user-select: none;
+		flex-shrink: 0;
 	}
 
 	.iframe-bar:hover {
