@@ -180,8 +180,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return json({ error: 'Session info not found' }, { status: 404 });
 		}
 
-		// Get base URL from request origin
-		const baseUrl = request.headers.get('origin') || `${request.url.split('/')[0]}//${request.url.split('/')[2]}`;
+		// Get base URL using HTTP_PORT environment variable
+		// This ensures we always use HTTP protocol for file server URLs,
+		// matching the approach in hooks.server.ts when creating PTY sessions
+		const httpPort = parseInt(process.env.HTTP_PORT || '3000', 10);
+		const baseUrl = `http://localhost:${httpPort}`;
 
 		// Convert file path to URL if needed
 		const finalUrl = convertFilePathToUrl(url, sessionInfo.worktreePath, baseUrl, repohash, branchname);

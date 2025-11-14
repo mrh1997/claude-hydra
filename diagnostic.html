@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Diagnostic</title>
+</head>
+<body>
+    <h1>Claude Hydra Connection Diagnostic</h1>
+    <div id="info"></div>
+    <script>
+        const info = document.getElementById('info');
+        info.innerHTML = `
+            <p><strong>Current Page Protocol:</strong> ${window.location.protocol}</p>
+            <p><strong>Current Page Host:</strong> ${window.location.host}</p>
+            <p><strong>Current Page URL:</strong> ${window.location.href}</p>
+            <p><strong>Is Secure Context:</strong> ${window.isSecureContext}</p>
+        `;
+    </script>
+</body>
+</html>
