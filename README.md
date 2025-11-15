@@ -30,17 +30,8 @@ A web-based terminal interface that enables you to run multiple Claude Code inst
 
 ### Installation
 
-**Option 1: Install globally (recommended)**
 ```bash
 npm install -g claude-hydra
-```
-
-**Option 2: Run from source**
-```bash
-git clone https://github.com/your-org/claude-hydra
-cd claude-hydra
-npm install
-npm run dev
 ```
 
 ### Quick Start
@@ -630,7 +621,7 @@ Open a URL or file in an iframe within the current terminal tab.
 ```
 
 **Parameters:**
-1. `url` (required) - URL or file path to open
+1. `url` (required) - URL or file path to open. If this is an URL it has to be on localhost!
 2. `instructions` (required) - Instructions text displayed in blue bar
 3. `hidden` (optional) - If set, iframe loads but stays hidden until toggled with F10
 
@@ -642,12 +633,11 @@ Open a URL or file in an iframe within the current terminal tab.
 
 **Examples:**
 ```
-/ch-open "https://docs.example.com/api" "Review API documentation"
 /ch-open "@index.html" "View homepage"
 /ch-open "@src/components/Button.tsx" "Review Button component"
 /ch-open "file:///C:/reports/test-results.html" "Check test results"
 /ch-open "README.md" "View readme"
-/ch-open "https://localhost:3000" "Test the application" hidden
+/ch-open "http://localhost:3000" "Test the application" hidden
 ```
 
 **Behavior:**
@@ -705,104 +695,6 @@ Open a URL or file in an iframe within the current terminal tab.
 |----------|--------|
 | `Ctrl-C` | Copy selected text (if selection exists) / Send interrupt signal (if no selection) |
 | `Ctrl-V` | Paste from clipboard |
-
----
-
-## Development Commands
-
-```bash
-# Start development server (Vite + WebSocket on port 3001)
-npm run dev
-
-# Type checking
-npm run check
-
-# Type checking in watch mode
-npm run check:watch
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
----
-
-## Architecture
-
-### Frontend (SvelteKit + xterm.js)
-- **Terminal Component** (`src/lib/components/Terminal.svelte`) - Uses xterm.js with FitAddon and WebLinksAddon for terminal rendering
-- **Tab Management** (`src/lib/stores/terminals.ts`) - Svelte writable store managing multiple terminal tabs
-- **WebSocket Client** - Connects to `ws://localhost:3001`, handles session lifecycle
-
-### Backend (Node.js)
-- **WebSocket Server** (`src/hooks.server.ts`) - Initializes on port 3001, routes messages to PtyManager
-- **PTY Manager** (`src/lib/server/pty-manager.ts`) - Manages pseudo-terminal sessions using `@homebridge/node-pty-prebuilt-multiarch` for Windows ConPTY support
-
-### Key Flows
-1. **Session Creation:** Frontend sends `create` → Backend spawns `claude` as PTY process → Returns sessionId
-2. **Data Flow:** User input → WebSocket `data` → PTY write → PTY output → WebSocket `data` → xterm.js display
-3. **Resize:** xterm.js resize event → WebSocket `resize` → PTY resize
-
----
-
-## Troubleshooting
-
-### Claude Code not found
-
-**Error:** `spawn claude ENOENT`
-
-**Solution:** Ensure Claude Code CLI is installed and in PATH:
-```bash
-claude --version
-```
-
-If not installed, install Claude Code and ensure it's available in your system PATH.
-
----
-
-### WebSocket connection failed
-
-**Error:** Connection refused on port 3001
-
-**Solutions:**
-- Ensure port 3001 is not in use by another application
-- Check firewall settings (allow connections to localhost:3001)
-- Try restarting the development server
-- Use a different port: `claude-hydra --port 4000`
-
----
-
-### Terminal not displaying correctly
-
-**Solutions:**
-- Clear browser cache and reload
-- Try a different browser (Chrome, Firefox, Edge)
-- Check browser console for JavaScript errors
-- Ensure browser supports WebSocket connections
-
----
-
-### Worktree creation fails
-
-**Error:** Unable to create worktree
-
-**Solutions:**
-- Ensure git repository is valid and not corrupted
-- Check that you have write permissions in the repository directory
-- Verify no conflicting worktrees exist: `git worktree list`
-- Clean up stale worktrees: `git worktree prune`
-
----
-
-### Auto-init script not running
-
-**Solutions:**
-- Verify script file exists in repository root (`.claude-hydra.autoinit.{ps1,cmd,sh}`)
-- Check script has execute permissions (Unix/macOS): `chmod +x .claude-hydra.autoinit.sh`
-- Review error dialog for script output
-- Test script manually to verify it works
 
 ---
 

@@ -63,3 +63,13 @@ Apart from the Webserver that delivers the SPA claude-hydra has two Websocket po
 - Terminal dimensions are sent to PTY immediately after session creation to ensure proper sizing
 - To look at bugs use Playwright. Create testscript in /test/playwright but remove them again when you fixed the bug
 - Always use bash to execute commands (not windows cmd.exe or powershell)
+
+## README.md Maintenance
+
+When adding new user-facing features to claude-hydra, **always update README.md** to document the feature for end users.
+
+**Guidelines:**
+- **Target Audience**: README.md is for users of claude-hydra, not developers working on claude-hydra itself
+- **User-Focused Content**: Include installation instructions, usage guides, feature documentation, configuration options, and keyboard shortcuts
+- **Exclude Developer Content**: Keep internal implementation details, architecture, development commands, and troubleshooting in CLAUDE.md only
+- **Update Promptly**: Document new features in README.md as part of the same change that introduces them
