@@ -437,18 +437,23 @@ export class PtyManager {
 	write(sessionId: string, data: string): void {
 		const session = this.sessions.get(sessionId);
 		if (session) {
+			// Send data to terminal IMMEDIATELY to avoid any input delay
+			session.ptyProcess.write(data);
+
 			// Detect bare ESC key press (not escape sequences like \x1b[O)
 			// Bare ESC = exactly '\x1b', not followed by control sequence characters
+			// Update git status asynchronously AFTER sending the key to avoid blocking
 			if (data === '\x1b') {
 				// Get repoHash from session manager
 				const sessionManager = this.repositoryRegistry.getRepositoryBySessionId(sessionId);
 				if (sessionManager) {
 					const repoHash = sessionManager.getRepoHash();
-					sendReadyStateWithGitStatus(repoHash, session.branchName);
+					// Run git status update asynchronously to not block terminal input
+					setImmediate(() => {
+						sendReadyStateWithGitStatus(repoHash, session.branchName);
+					});
 				}
 			}
-
-			session.ptyProcess.write(data);
 		}
 	}
 
