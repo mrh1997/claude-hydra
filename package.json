@@ -1,10 +1,37 @@
 {
   "name": "claude-hydra",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "license": "GPL-2.0",
-  "private": true,
+  "description": "A web-based terminal interface that runs Claude Code in the browser with full Windows support",
+  "author": "Robert Hölzl <robert.hoelzl@posteo.de>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrh1997/claude-hydra.git"
+  },
+  "homepage": "https://github.com/mrh1997/claude-hydra#readme",
+  "bugs": {
+    "url": "https://github.com/mrh1997/claude-hydra/issues"
+  },
+  "keywords": [
+    "claude",
+    "terminal",
+    "cli",
+    "ai",
+    "browser"
+  ],
   "bin": {
     "claude-hydra": "./claude-hydra-server.js"
+  },
+  "files": [
+    "build/",
+    "static/",
+    "claude-hydra-server.js",
+    "src/lib/server/",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
   },
   "scripts": {
     "dev": "node claude-hydra-server.js --dev",
