@@ -1,35 +1,62 @@
-import { dev } from '$app/environment';
-import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+/**
+ * Finds package.json by walking up the directory tree from the given starting directory.
+ * This works in both development and production environments.
+ */
+function findPackageJson(startDir: string): string | null {
+	let currentDir = startDir;
+
+	// Walk up the directory tree (max 10 levels to prevent infinite loops)
+	for (let i = 0; i < 10; i++) {
+		const packageJsonPath = join(currentDir, 'package.json');
+
+		if (existsSync(packageJsonPath)) {
+			try {
+				const content = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+				// Verify it's the claude-hydra package by checking the name
+				if (content.name === 'claude-hydra') {
+					return packageJsonPath;
+				}
+			} catch {
+				// Invalid JSON, continue searching
+			}
+		}
+
+		const parentDir = dirname(currentDir);
+		// Stop if we've reached the root
+		if (parentDir === currentDir) {
+			break;
+		}
+		currentDir = parentDir;
+	}
+
+	return null;
+}
+
 export async function load() {
 	let version = '';
 
-	if (dev) {
-		try {
-			// Get the source directory (claude-hydra repo root)
-			// This file is at src/routes/+layout.server.ts, so go up 2 levels
-			const __filename = fileURLToPath(import.meta.url);
-			const __dirname = dirname(__filename);
-			const sourceDir = join(__dirname, '..', '..');
+	try {
+		const __filename = fileURLToPath(import.meta.url);
+		const __dirname = dirname(__filename);
 
-			// Get first 4 characters of git hash from source repo
-			const gitHash = execSync('git rev-parse HEAD', { cwd: sourceDir, encoding: 'utf8' }).trim().substring(0, 4);
-			version = gitHash;
+		// Find package.json by walking up the directory tree
+		const packageJsonPath = findPackageJson(__dirname);
 
-			// Check if .claude-hydra.devversion file exists in source repo
-			const devVersionPath = join(sourceDir, '.claude-hydra.devversion');
-			if (existsSync(devVersionPath)) {
-				const devVersion = readFileSync(devVersionPath, 'utf8').trim();
-				if (devVersion) {
-					version += `-${devVersion}`;
-				}
+		if (packageJsonPath) {
+			const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+			const pkgVersion = packageJson.version || '';
+
+			// Only display version if it's not 0.0.0
+			if (pkgVersion !== '0.0.0') {
+				version = `claude-hydra@${pkgVersion}`;
 			}
-		} catch (error) {
-			console.error('Failed to get version:', error);
 		}
+	} catch (error) {
+		console.error('Failed to get version:', error);
 	}
 
 	// Read WebSocket ports from environment variables set by claude-hydra-server.js
