@@ -6,6 +6,7 @@ import { join, dirname, resolve } from 'path';
 import type { RepositoryRegistry } from '$lib/server/repository-registry';
 import type { SessionInfo } from '$lib/server/session-manager';
 import updateStateTemplate from '../../template/update-state.js?raw';
+import runDelayedTemplate from '../../template/run-delayed.js?raw';
 import chCommitTemplate from '../../template/commands/ch-commit.md?raw';
 import chMergeTemplate from '../../template/commands/ch-merge.md?raw';
 import chRebaseTemplate from '../../template/commands/ch-rebase.md?raw';
@@ -81,8 +82,9 @@ export class PtyManager {
 			mkdirSync(commandsDir, { recursive: true });
 		}
 
-		// Write hook script from bundled template
+		// Write hook scripts from bundled templates
 		writeFileSync(hookScriptPath, updateStateTemplate);
+		writeFileSync(join(hooksDir, 'run-delayed.js'), runDelayedTemplate);
 
 		// Write command files from bundled templates
 		writeFileSync(join(commandsDir, 'ch-commit.md'), chCommitTemplate);
@@ -157,7 +159,8 @@ export class PtyManager {
 
 	private readIgnoreFilesConfig(repoRoot: string): string[] {
 		const patterns: string[] = [
-			'.claude/'  // Always exclude .claude directory
+			'.claude/',           // Always exclude .claude directory
+			'.claude-hydra.start' // Trigger file for waituser
 		];
 
 		const configPath = join(repoRoot, '.claude-hydra.ignorefiles');

@@ -6,7 +6,7 @@ import https from 'https';
 
 // Get state from command line argument
 const state = process.argv[2];
-if (!state || !['ready', 'running', 'close', 'waituser', 'openurl'].includes(state)) {
+if (!state || !['ready', 'running', 'close', 'openurl'].includes(state)) {
   process.exit(1);
 }
 
@@ -17,20 +17,6 @@ if (state === 'close') {
   // Validate mode if provided
   if (mode && !['discard', 'keep-branch'].includes(mode)) {
     process.exit(1);
-  }
-}
-
-// For waituser state, get additional parameters
-let text, commandline;
-if (state === 'waituser') {
-  commandline = process.argv[3]; // First parameter: command to execute
-  text = process.argv[4]; // Second parameter: optional display text
-  if (!commandline) {
-    process.exit(1);
-  }
-  // If text is not provided, use commandline as display text
-  if (!text) {
-    text = commandline;
   }
 }
 
@@ -99,10 +85,6 @@ req.socket?.unref();
 const requestBody = { state };
 if (state === 'close' && mode) {
   requestBody.mode = mode;
-}
-if (state === 'waituser') {
-  requestBody.text = text;
-  requestBody.commandline = commandline;
 }
 if (state === 'openurl') {
   requestBody.url = url;

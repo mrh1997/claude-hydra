@@ -5,8 +5,9 @@ import { RepositoryRegistry } from '$lib/server/repository-registry';
 import { registerConnection, unregisterConnection, sendGitBranchStatus, broadcastGitStatusToAll } from '$lib/server/websocket-manager';
 import { setRepositoryRegistry } from '$lib/server/session-manager-instance';
 import { initializeFileServerSecret } from '$lib/server/secret-instance';
-import { promises as fs } from 'fs';
+import { promises as fs, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
+import { join } from 'path';
 
 // Read ports from environment variables set by claude-hydra-server.js
 const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
@@ -682,10 +683,10 @@ function initWebSocketServer() {
 						}
 						break;
 
-					case 'executeWaituser':
-						// Execute waituser command
+					case 'triggerWaituser':
+						// Trigger waituser command by creating the trigger file
 						const waituserSessionId = data.sessionId || sessionId;
-						if (waituserSessionId && data.commandline) {
+						if (waituserSessionId) {
 							try {
 								const sessionManager = repositoryRegistry.getRepositoryBySessionId(waituserSessionId);
 								if (sessionManager) {
@@ -693,28 +694,15 @@ function initWebSocketServer() {
 									const allSessions = sessionManager.getAllSessions();
 									const sessionInfo = allSessions.get(waituserSessionId);
 									if (sessionInfo) {
-										// Execute command in worktree
-										try {
-											execSync(data.commandline, {
-												cwd: sessionInfo.worktreePath,
-												encoding: 'utf8',
-												stdio: 'pipe'
-											});
-											// Success - no need to send anything back
-										} catch (error: any) {
-											// Command failed - send error to frontend
-											const output = (error.stdout || '') + (error.stderr || '');
-											ws.send(JSON.stringify({
-												type: 'waituserError',
-												output: output || error.message || 'Command execution failed'
-											}));
-										}
+										// Create trigger file (.claude-hydra.start)
+										const triggerFile = join(sessionInfo.worktreePath, '.claude-hydra.start');
+										writeFileSync(triggerFile, '');
+										// run-delayed.js will detect this file and execute the command
 									}
 								}
 							} catch (error: any) {
 								const errorMessage = error.message || String(error);
-								console.error('Failed to execute waituser command:', errorMessage);
-								ws.send(JSON.stringify({ type: 'waituserError', output: errorMessage }));
+								console.error('Failed to trigger waituser:', errorMessage);
 							}
 						}
 						break;

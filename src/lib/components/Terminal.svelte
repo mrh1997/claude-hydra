@@ -6,7 +6,6 @@
 	import CommitList from './CommitList.svelte';
 	import Splitter from './Splitter.svelte';
 	import DiffViewer from './DiffViewer.svelte';
-	import WaituserErrorDialog from './WaituserErrorDialog.svelte';
 	import { shouldBlockFromTerminal } from '$lib/shortcuts';
 	import { FocusStack } from '$lib/FocusStack';
 
@@ -55,9 +54,6 @@
 	// Waituser state
 	let showWaituserBox = false;
 	let waituserText = '';
-	let waituserCommandline = '';
-	let showWaituserErrorDialog = false;
-	let waituserErrorOutput = '';
 
 	// Autoinit state
 	let showAutoInitStatus = false;
@@ -347,9 +343,8 @@
 						break;
 
 					case 'waituser':
-						// Show waituser box with text and commandline
+						// Show waituser box with text only
 						waituserText = message.text;
-						waituserCommandline = message.commandline;
 						showWaituserBox = true;
 						break;
 
@@ -365,12 +360,6 @@
 						if (iframeElement) {
 							iframeElement.src = iframeElement.src;
 						}
-						break;
-
-					case 'waituserError':
-						// Show error dialog with command output
-						waituserErrorOutput = message.output;
-						showWaituserErrorDialog = true;
 						break;
 
 					case 'autoInitStatus':
@@ -816,28 +805,26 @@
 	}
 
 	/**
-	 * Handle F9 key press - execute waituser command
+	 * Handle F9 key press - trigger waituser command execution
 	 */
 	export function handleWaituserExecute() {
-		if (!showWaituserBox || !waituserCommandline) {
+		if (!showWaituserBox) {
 			return;
 		}
 
 		// Hide the waituser box
 		showWaituserBox = false;
 
-		// Send execute command to backend
+		// Send trigger command to backend (creates .claude-hydra.start file)
 		if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
 			ws.send(JSON.stringify({
-				type: 'executeWaituser',
-				sessionId,
-				commandline: waituserCommandline
+				type: 'triggerWaituser',
+				sessionId
 			}));
 		}
 
 		// Clear state
 		waituserText = '';
-		waituserCommandline = '';
 	}
 
 	/**
@@ -965,13 +952,6 @@
 		</div>
 	{/if}
 </div>
-
-<WaituserErrorDialog
-	show={showWaituserErrorDialog}
-	output={waituserErrorOutput}
-	{focusStack}
-	on:close={() => { showWaituserErrorDialog = false; }}
-/>
 
 <style>
 	.terminal-container {

@@ -88,10 +88,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'Invalid state' }, { status: 400 });
 	}
 
-	// Validate waituser parameters
-	if (state === 'waituser' && !commandline) {
-		return json({ error: 'waituser state requires commandline parameter' }, { status: 400 });
-	}
+	// Validate waituser parameters (text is optional)
+	// Note: commandline is no longer required - run-delayed.js handles execution
 
 	// Validate openurl parameters
 	if (state === 'openurl' && (!url || !instructions)) {
@@ -156,8 +154,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			}
 		}
 	} else if (state === 'waituser') {
-		// For 'waituser' state, send waituser request with text and commandline
-		sent = sendWaituserRequest(repohash, branchname, text || commandline, commandline);
+		// For 'waituser' state, send waituser request with text only (no commandline)
+		sent = sendWaituserRequest(repohash, branchname, text || 'Waiting for user...');
 	} else if (state === 'openurl') {
 		// For 'openurl' state, convert file paths to URLs and send openurl request
 		const registry = getRepositoryRegistry();

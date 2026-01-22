@@ -12,4 +12,10 @@ Examples:
 - `/ch-waituser "npm test"` - Shows "npm test" in the prompt
 - `/ch-waituser "npm test" "Run all tests"` - Shows "Run all tests" in the prompt
 
-Please call `.claude/hooks/update-state.js waituser` with the provided arguments.
+IMPORTANT: Run the script using the Bash tool with `run_in_background: true` so Claude manages the process and you can continue working while waiting for user input.
+
+Please execute using the Bash tool:
+- command: `node .claude/hooks/run-delayed.js "command" "text"`
+- run_in_background: `true`
+
+Replace "command" with the command to execute and "text" with the display text (or omit text to use the command as display text).

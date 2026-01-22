@@ -187,11 +187,11 @@ export function sendKeepBranchAndCloseRequest(repoHash: string, branchName: stri
 	return false;
 }
 
-export function sendWaituserRequest(repoHash: string, branchName: string, text: string, commandline: string): boolean {
+export function sendWaituserRequest(repoHash: string, branchName: string, text: string): boolean {
 	const key = makeConnectionKey(repoHash, branchName);
 	const ws = branchConnections.get(key);
 	if (ws && ws.readyState === ws.OPEN) {
-		ws.send(JSON.stringify({ type: 'waituser', text, commandline }));
+		ws.send(JSON.stringify({ type: 'waituser', text }));
 		return true;
 	}
 	return false;

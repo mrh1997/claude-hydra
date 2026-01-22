@@ -12,4 +12,5 @@ nul
 /.idea
 .claude/settings.local.json
 .claude-hydra.devversion
+.claude-hydra.start
 CLAUDE.local.md
